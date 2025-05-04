@@ -70,7 +70,7 @@ for i, player in enumerate(players):
 
 game_on = True
 end_after_round = False
-
+ending_player_index = None
 
 
 def get_card_value(card, values_dict):
@@ -163,15 +163,29 @@ while game_on:
             next_player_index = (i+1) % len(players)
             players[next_player_index].append(played_card)
         
-        queens_response = input("Do you say queens?(y/n)")
-        if queens_response == "y":
-            end_after_round = True
+        if not end_after_round:
+            response = input("Do you want to say QUEENS and end the game? (y/n)").lower()
+            if response == "y":
+                end_after_round = True
+                ending_player_index = i
+
 
     if end_after_round:
+        scores = []
         game_on = False
         for i, player in enumerate (players):
             score = calculate_score(player, values)
+            scores.append(score)
             print(f"Player {i+1}: {score} points")
-            
+
+        min_score = min(scores)
+        min_score_player = scores.index(min_score)
+
+        if ending_player_index == min_score_player:
+            print(f"Player {ending_player_index +1 } ended the game and won")
+        else:
+            print(f"Player {ending_player_index} lost, the others won!")
+
+
     
     
