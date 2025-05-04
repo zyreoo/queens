@@ -11,6 +11,10 @@ values = {"2": 2, "3": 3, "4": 4, "5":5, "6":6,
           "7":7, "8":8, "9":9, "10":10, 
           "J":11, "K":12, "A":13, "Q": 14}
 
+score_values = {"2": 2, "3": 3, "4": 4, "5":5, "6":6, 
+          "7":7, "8":8, "9":9, "10":10, 
+          "J":10, "K":10, "A":1, "Q":0}
+
 
 deck = []
 
@@ -21,9 +25,8 @@ for _ in range (2):
             deck.append(card)
 
 
-random.shuffle(deck)
-
 shuffled_deck = deck.copy()
+random.shuffle(shuffled_deck)
 
 
 
@@ -66,6 +69,7 @@ for i, player in enumerate(players):
 
 
 game_on = True
+end_after_round = False
 
 
 
@@ -74,9 +78,12 @@ def get_card_value(card, values_dict):
     return values_dict[rank]
 
 
+def calculate_score(hand, values):
+    return sum(get_card_value(card, values) for card in hand)
 
 
 # the actually game
+
 
 while game_on:
     for i, player in enumerate(players):
@@ -87,76 +94,84 @@ while game_on:
 
         print(' '.join(f"{j} *_*" for j in range (len(player))))
 
-        response = input("do you wanna queens?(y/n)")
-        if response == "n":
-            response = int(input("What card would you like to play?"))
+        response = int(input("What card would you like to play?"))
         
-            played_card = player.pop(response)
-            table.append(played_card)
-            print(f"player {i+1} played {played_card}")
+        played_card = player.pop(response)
+        table.append(played_card)
+        print(f"player {i+1} played {played_card}")
 
 
-            while len(table) >1:
-                used_deck.append(table.pop(0))
+        while len(table) >1:
+            used_deck.append(table.pop(0))
 
-            for k, card in enumerate (player):
-                if get_card_value(card, values) == get_card_value(table[0], values):
-                    response = input("would you like to put down ur card? y or n")
-                    if response == "y":
-                        table.append(player.pop(k))
+        for k, card in enumerate (player):
+            if get_card_value(card, values) == get_card_value(table[0], values):
+                response = input("would you like to put down ur card? y or n")
+                if response == "y":
+                    table.append(player.pop(k))
 
-            if get_card_value(played_card, values) == 11:
-                print("You played a jack, you can exchange with another player")
-                choice = input("would you like to exchange?(y/n)")
+        if get_card_value(played_card, values) == 11:
+            print("You played a jack, you can exchange with another player")
+            choice = input("would you like to exchange?(y/n)")
 
-                if choice.lower() == "y":
+            if choice.lower() == "y":
 
-                    for idx, p in enumerate(players):
-                        if idx != 1:
-                            print(f"Player {idx +1 }: {len(p)} cards")
+                for idx, p in enumerate(players):
+                    if idx != 1:
+                        print(f"Player {idx +1 }: {len(p)} cards")
 
-                    target_player = int(input("From which player would you like to exchange?"))-1
-                    if target_player == i or target_player > len(players):
-                        print("Invalid choose")
-                    else:
-                        print("Your hand:")
+                target_player = int(input("From which player would you like to exchange?"))-1
+                if target_player == i or target_player > len(players):
+                    print("Invalid choose")
+                else:
+                    print("Your hand:")
 
-                        for idx,card in enumerate (player):
-                            print(f"{idx}:{card}")
-                        your_card_index = int(input("What card from YOU would you like to trade?"))
+                    for idx,card in enumerate (player):
+                        print(f"{idx}:{card}")
+                    your_card_index = int(input("What card from YOU would you like to trade?"))
 
-                        print("their hand")
+                    print("their hand")
 
-                        for idx,card  in enumerate(players[target_player]):
-                            print(f"{idx}:{card}")
-                        their_card_index = int(input("Which card from their pack would you like to trade"))    
-                        
-                        player[your_card_index], players[target_player][their_card_index] = (players[target_player][their_card_index],player[your_card_index])
+                    for idx,card  in enumerate(players[target_player]):
+                        print(f"{idx}:{card}")
+                    their_card_index = int(input("Which card from their pack would you like to trade"))    
+                    
+                    player[your_card_index], players[target_player][their_card_index] = (players[target_player][their_card_index],player[your_card_index])
 
-                        print(player)
-                        print(players[target_player])
+                    print(player)
+                    print(players[target_player])
 
-                
-            if get_card_value(played_card, values) == 12:
-                print("You have just played a King. Now you can choose to see one of ur cards")
+            
+        if get_card_value(played_card, values) == 12:
+            print("You have just played a King. Now you can choose to see one of ur cards")
 
-                choice = input("Would you like to see one of ur cards? (y/n)")
+            choice = input("Would you like to see one of ur cards? (y/n)")
 
-                if choice == "y":
+            if choice == "y":
 
-                    for idx, card in enumerate (player):
-                        print(f"{idx}:*_*")
+                for idx, card in enumerate (player):
+                    print(f"{idx}:*_*")
 
-                    show_card = int(input("Which card would you like to choose?"))
+                show_card = int(input("Which card would you like to choose?"))
 
-                    print(player[show_card])
+                print(player[show_card])
 
 
-            if get_card_value(played_card, values) == 14:
-                print("Ahh, you played a Queen.. this queen will go to the next person")
+        if get_card_value(played_card, values) == 14:
+            print("Ahh, you played a Queen.. this queen will go to the next person")
 
-                next_player_index = (i+1) % len(players)
-                players[next_player_index].append(played_card)
+            next_player_index = (i+1) % len(players)
+            players[next_player_index].append(played_card)
+        
+        queens_response = input("Do you say queens?(y/n)")
+        if queens_response == "y":
+            end_after_round = True
 
-        elif response =="y":
-            print("ok!")
+    if end_after_round:
+        game_on = False
+        for i, player in enumerate (players):
+            score = calculate_score(player, values)
+            print(f"Player {i+1}: {score} points")
+            
+    
+    
