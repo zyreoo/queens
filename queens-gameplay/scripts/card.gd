@@ -17,21 +17,24 @@ func _on_card_clicked():
 	
 func _ready():
 	
-	texture = card_back_texture
 	var front_image_path = "res://assets/%s_%s.png" % [suit,rank]
 	front_texture = load(front_image_path)	
+	
+	self.texture_normal = card_back_texture
 	
 	label_rank_suit = $LabelRankSuit
 	label_rank_suit.text = "%s%s" % [rank,suit]
 	
-	pressed.connect(_on_card_clicked)
+	var callback = Callable(self, "_on_card_clicked")
+	if not is_connected("pressed", callback):
+		connect("pressed", callback)
 
 	
 func flip_card():
 	if is_flipped:
-		texture = card_back_texture
+		self.texture_normal = card_back_texture
 	
 	else:
-		texture = front_texture
+		self.texture_normal = front_texture
 	is_flipped = !is_flipped
 		
