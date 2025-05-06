@@ -1,0 +1,18 @@
+[gd_scene load_steps=3 format=3 uid="uid://dcjg1cr2fpdtu"]
+
+[ext_resource type="Script" path="res://scripts/card.gd" id="1_ppukc"]
+
+[sub_resource type="SystemFont" id="SystemFont_su63r"]
+subpixel_positioning = 0
+
+[node name="Card" type="TextureButton"]
+script = ExtResource("1_ppukc")
+
+[node name="LabelRankSuit" type="Label" parent="."]
+layout_mode = 0
+offset_left = -1.0
+offset_top = 3.0
+offset_right = 179.0
+offset_bottom = 78.0
+theme_override_fonts/font = SubResource("SystemFont_su63r")
+theme_override_font_sizes/font_size = 48
