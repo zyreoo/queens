@@ -5,3 +5,11 @@
 [node name="Main" type="Node2D"]
 position = Vector2(-1, 1)
 script = ExtResource("1_pcy04")
+
+[node name="DrawCardButton" type="Button" parent="."]
+offset_left = 542.0
+offset_top = 314.0
+offset_right = 568.0
+offset_bottom = 338.0
+
+[connection signal="pressed" from="DrawCardButton" to="." method="_on_draw_card_button_pressed"]

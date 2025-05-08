@@ -4,7 +4,7 @@ extends Node2D
 var hand = []
 var score = 0
 
-func add_card(card_instance):
+func add_card(card_instance: Node, face_up := false):
 	hand.append(card_instance)
 	add_child(card_instance)
 	
@@ -23,6 +23,9 @@ func add_card(card_instance):
 	else:
 		var x = spacing_horizontal * (index - (total_cards-1)/2.0)
 		card_instance.position = Vector2(x, 0)
+		
+	if face_up:
+		card_instance.flip_card()
 	
 
 func calculate_score(_values_dict):
