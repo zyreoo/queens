@@ -51,6 +51,7 @@ func _ready():
 				3: player_instance.rotation_degrees = 90
 			deal_cards(player_instance)
 			
+			
 
 func deal_cards(player_instance):
 	for j in range(4):
@@ -103,6 +104,28 @@ func _on_discard_button_pressed():
 	drawn_card = null
 	next_turn()
 
+func place_start_card():
+	if deck.size() == 0:
+		deck = used_deck
+		used_deck =[]
+		deck.shuffle()
+		
+	var card_instance = preload("res://scenes/Card.tscn").instantiate()
+	var card_str = deck.pop_back()
+	var card_parts = card_str.split(":")
+	card_instance.suit = card_parts[0]
+	card_instance.rank = card_parts[1]
+	card_instance.value = values[card_parts[1]]
+	card_instance.flip_card()
+	card_instance.position = Vector2(600, 300)
+	
+	add_child(card_instance)
+	used_deck.append(card_str)
+	
+	
+		
+
+
 func swap_card_with(clicked_card):
 	var player = players[current_player_index]
 	print("Swapping with card at index:", clicked_card.hand_index)
@@ -126,9 +149,9 @@ func swap_card_with(clicked_card):
 	
 	
 
-		
 	print("Swapped in card:", drawn_card.rank, drawn_card.suit, "at index", drawn_card.hand_index)
 	used_deck.append("%s:%s" % [clicked_card.suit, str(clicked_card.rank)])
 	drawn_card = null
 	swap_mode = false
 	next_turn()
+	

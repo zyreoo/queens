@@ -16,6 +16,12 @@ var hand_index = -1
 
 func _on_card_clicked():
 	var main = get_tree().get_root().get_node("Main")
+	
+	
+	if holding_player != main.players[main.current_player_index]:
+		print("not ur turn")
+		return
+		
 	if main.swap_mode and main.drawn_card != null:
 		main.swap_card_with(self)
 	else :

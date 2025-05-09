@@ -1,6 +1,9 @@
 extends Node2D
 
 
+@export var player_ide: int = -1
+
+
 var hand = []
 var score = 0
 
@@ -47,7 +50,7 @@ func arrange_hand():
 				card.rotation_degrees = 0
 				card.position = Vector2(spacing_horizontal * (i - center_offset), 0)
 		
-	
+
 
 func calculate_score(_values_dict):
 	score = 0
