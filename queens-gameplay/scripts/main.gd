@@ -11,6 +11,7 @@ var values = {"2": 2, "3": 3, "4": 4, "5": 5, "6": 6, "7": 7, "8": 8, "9": 9, "1
 
 var drawn_card = null 
 var swap_mode = false
+var center_card = null
 
 func _ready():
 	print("the main scene is ready")
@@ -51,6 +52,8 @@ func _ready():
 				3: player_instance.rotation_degrees = 90
 			deal_cards(player_instance)
 			
+	place_start_card()
+			
 			
 
 func deal_cards(player_instance):
@@ -61,6 +64,7 @@ func deal_cards(player_instance):
 		card_instance.suit = card_parts[0]
 		card_instance.rank = card_parts[1]
 		card_instance.value = values[card_parts[1]]
+		
 		var face_up = j < 2
 		player_instance.add_card(card_instance, face_up)
 
@@ -71,6 +75,23 @@ func next_turn():
 func _on_draw_card_button_pressed():
 	print("button pressed!")
 	draw_card_for_current_player()
+	
+	
+func _on_discard_button_pressed():
+	if drawn_card == null:
+		print("No card to discard")
+		return
+
+	print("Discarding: %s%s " % [drawn_card.rank, drawn_card.suit])
+
+	used_deck.append("%s:%s" % [drawn_card.suit, drawn_card.rank])
+
+	remove_child(drawn_card)
+	drawn_card.queue_free()
+	drawn_card = null 
+
+	next_turn()
+
 
 func draw_card_for_current_player():
 	if deck.size() == 0:
@@ -93,16 +114,7 @@ func _on_swap_button_pressed():
 		return
 	swap_mode = true
 	print("Swap activated")
-
-func _on_discard_button_pressed():
-	if drawn_card == null:
-		print("No card to discard")
-		return
-	used_deck.append("%s:%s" % [drawn_card.suit, str(drawn_card.rank)])
-	remove_child(drawn_card)
-	drawn_card.queue_free()
-	drawn_card = null
-	next_turn()
+	
 
 func place_start_card():
 	if deck.size() == 0:
@@ -119,12 +131,12 @@ func place_start_card():
 	card_instance.flip_card()
 	card_instance.position = Vector2(600, 300)
 	
+	card_instance.flip_card()
+	
+	print(card_instance)
 	add_child(card_instance)
 	used_deck.append(card_str)
 	
-	
-		
-
 
 func swap_card_with(clicked_card):
 	var player = players[current_player_index]
@@ -133,7 +145,7 @@ func swap_card_with(clicked_card):
 	player.hand[clicked_card.hand_index] = drawn_card
 	
 	clicked_card.queue_free()
-	
+
 	
 	if drawn_card.get_parent() != null:
 		drawn_card.get_parent().remove_child(drawn_card)
@@ -154,4 +166,23 @@ func swap_card_with(clicked_card):
 	drawn_card = null
 	swap_mode = false
 	next_turn()
+	
+	
+func play_card_to_center(card):
+	
+	
+	if center_card and center_card.is_inside_tree():
+		remove_child(center_card)
+		center_card.queue_free()
+	
+	center_card = card
+	remove_child(card)
+	add_child(card)
+	
+	card.global_position = $CenterCardSlot.global_position
+	
+	card.set_process(false)
+	card.set_mouse_filter(Control.MOUSE_FILTER_IGNORE)
+	if not card.is_flipped:
+		card.flip_card()
 	
