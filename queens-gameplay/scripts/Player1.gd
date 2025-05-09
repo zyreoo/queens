@@ -9,23 +9,33 @@ func add_card(card_instance: Node, face_up := false):
 	add_child(card_instance)
 	
 	var index = hand.size() -1
-	var total_cards = hand.size()
-	var spacing_horizontal = 100
-	var spacing_vertical = 140
 	
 	
 	var rot = int(round(rotation_degrees))
 	
-	if abs(rot) ==90:
-		var y = spacing_vertical*(index - (total_cards-1)/2.0)
-		card_instance.position = Vector2(0,y)
-		
-	else:
-		var x = spacing_horizontal * (index - (total_cards-1)/2.0)
-		card_instance.position = Vector2(x, 0)
+	card_instance.holding_player = self
+	card_instance.hand_index = index
 		
 	if face_up:
 		card_instance.flip_card()
+		
+	arrange_hand()
+	
+	
+func arrange_hand():
+	var spacing_horizontal = 30
+	var spacing_vertical = 140
+	var total_cards = hand.size()
+	var rot = int(round(rotation_degrees))
+	
+	for i in range (total_cards):
+		var card = hand[i]
+		card.hand_index = i
+		if abs(rot) == 90:
+			card.position = Vector2(0, spacing_vertical *( i - (total_cards - 1)/2.0))
+		else:
+			card.position = Vector2(spacing_horizontal *( i - (total_cards - 1)/2.0), 0)
+		
 	
 
 func calculate_score(_values_dict):

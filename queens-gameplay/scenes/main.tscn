@@ -12,4 +12,18 @@ offset_top = 314.0
 offset_right = 568.0
 offset_bottom = 338.0
 
+[node name="SwapButton" type="Button" parent="."]
+offset_left = 537.0
+offset_top = 242.0
+offset_right = 569.0
+offset_bottom = 262.0
+
+[node name="DiscardButton" type="Button" parent="."]
+offset_left = 545.0
+offset_top = 272.0
+offset_right = 561.0
+offset_bottom = 285.0
+
 [connection signal="pressed" from="DrawCardButton" to="." method="_on_draw_card_button_pressed"]
+[connection signal="pressed" from="SwapButton" to="." method="_on_swap_button_pressed"]
+[connection signal="pressed" from="DiscardButton" to="." method="_on_discard_button_pressed"]

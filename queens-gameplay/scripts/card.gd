@@ -10,15 +10,21 @@ var front_texture : Texture = null
 var label_rank_suit = null 
 var texture = null
 var is_flipped = false
+var holding_player : Node = null
+var hand_index = -1
 
 
 func _on_card_clicked():
-	flip_card()
+	var main = get_tree().get_root().get_node("Main")
+	if main.swap_mode and main.drawn_card != null:
+		main.swap_card_with(self)
+	else :
+		flip_card()
 	
 func _ready():
 	
-	var front_image_path = "res://assets/%s %s.png" % [suit,rank]
-	front_texture = load(front_image_path)	
+	var front_image_path = "res://assets/%s %s.png" % [suit, rank]
+	front_texture = load(front_image_path)
 	
 	self.texture_normal = card_back_texture
 	
@@ -45,5 +51,8 @@ func flip_card():
 		self.texture_normal = card_back_texture
 		if label_rank_suit != null:
 			label_rank_suit.visible = false
+			
+			
+			
 		
 		
