@@ -22,6 +22,7 @@ func _ready():
 		Vector2(screen_size.x/2, screen_size.y -100),
 		Vector2(100, screen_size.y/2)
 	]
+	
 
 	for suit in suits:
 		for rank in ranks:
@@ -32,6 +33,12 @@ func _ready():
 	for i in range(4):
 		var player_scene = preload("res://scenes/Player.tscn")
 		var player_instance = player_scene.instantiate()
+		
+		match i:
+			0: player_instance.rotation_degrees = 180
+			1: player_instance.rotation_degrees = -90
+			2:player_instance.rotation_degrees = 0
+			3:player_instance.rotation_degrees = 90
 
 		if player_instance:
 			players.append(player_instance)
@@ -43,6 +50,7 @@ func _ready():
 				2: player_instance.rotation_degrees = 0
 				3: player_instance.rotation_degrees = 90
 			deal_cards(player_instance)
+			
 
 func deal_cards(player_instance):
 	for j in range(4):
@@ -101,7 +109,6 @@ func swap_card_with(clicked_card):
 	
 	player.hand[clicked_card.hand_index] = drawn_card
 	
-	remove_child(clicked_card)
 	clicked_card.queue_free()
 	
 	
@@ -110,6 +117,8 @@ func swap_card_with(clicked_card):
 	
 	drawn_card.holding_player = player
 	drawn_card.hand_index = clicked_card.hand_index
+	
+	
 	player.add_child(drawn_card)
 	
 	if player.has_method("arrange_hand"):

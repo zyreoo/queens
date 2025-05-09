@@ -28,29 +28,19 @@ func _ready():
 	
 	self.texture_normal = card_back_texture
 	
-	label_rank_suit = $LabelRankSuit
-	label_rank_suit.text = "%s%s" % [rank,suit]
-	label_rank_suit.visible = false
 	
 	var callback = Callable(self, "_on_card_clicked")
 	if not is_connected("pressed", callback):
 		connect("pressed", callback)
-		
-	print("Label nodes:", $LabelRankSuit)
 
 	
 func flip_card():
 	is_flipped = !is_flipped
 	if is_flipped:
 		self.texture_normal = front_texture
-		if label_rank_suit != null:
-			label_rank_suit.visible = true
 		
-	
 	else:
 		self.texture_normal = card_back_texture
-		if label_rank_suit != null:
-			label_rank_suit.visible = false
 			
 			
 			
