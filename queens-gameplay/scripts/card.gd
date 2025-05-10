@@ -33,10 +33,16 @@ func _ready():
 func _on_card_clicked():
 	var main = get_tree().get_root().get_node("Main")
 	
-	
-	
-	if holding_player != main.players[main.current_player_index]:
-		print("not ur turn")
+	if main.in_flip_phase:
+		if holding_player == main.players[main.flip_phase_index]:
+			if not is_flipped and main.flip_count < 2:
+				flip_card()
+				main.flip_count +=1
+				
+				if main.flip_count ==2:
+					main.advance_flip_phase()
+		else:
+			print("not your flip turn")
 		return
 		
 	if main.swap_mode and main.drawn_card != null:

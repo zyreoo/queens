@@ -36,7 +36,16 @@ offset_right = 1049.0
 offset_bottom = 366.0
 text = "Start Game"
 
+[node name="RevealCards" type="Button" parent="."]
+offset_left = 1010.0
+offset_top = 404.0
+offset_right = 1079.0
+offset_bottom = 463.0
+text = "reveal
+"
+
 [connection signal="pressed" from="DrawCardButton" to="." method="_on_draw_card_button_pressed"]
 [connection signal="pressed" from="SwapButton" to="." method="_on_swap_button_pressed"]
 [connection signal="pressed" from="DiscardButton" to="." method="_on_discard_button_pressed"]
 [connection signal="pressed" from="StartGameButton" to="." method="_on_start_game_button_pressed"]
+[connection signal="pressed" from="RevealCards" to="." method="_on_reveal_cards_pressed"]

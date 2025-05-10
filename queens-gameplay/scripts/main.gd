@@ -13,6 +13,9 @@ var drawn_card = null
 var swap_mode = false
 var center_card = null
 var game_started = false
+var in_flip_phase = false
+var flip_phase_index = 0
+var flip_count = 0
 
 func _ready():
 	print("the main scene is ready")
@@ -23,7 +26,6 @@ func _ready():
 	$DiscardButton.disabled = true
 	
 	setup_players()
-	preview_initial_cards()
 	
 	
 	var start_card_str = shuffled_deck.pop_back()
@@ -31,12 +33,13 @@ func _ready():
 	var start_card = preload("res://scenes/Card.tscn").instantiate()
 	start_card.suit = start_card_parts[0]
 	start_card.rank = start_card_parts[1]
+	start_card.value = values[start_card_parts[1]]
 	
 	add_child(start_card)
 	start_card.global_position = $CenterCardSlot.global_position
 	start_card.flip_card()
 	center_card = start_card
-			
+	
 
 func deal_cards(player_instance):
 	for j in range(4):
@@ -154,22 +157,18 @@ func play_card_to_center(card):
 		
 		
 func _on_start_game_button_pressed():
-	game_started = true
+	game_started = false
 	$StartGameButton.visible = false
+	$RevealCards.visible = true
+	flip_phase_index = 0
+	in_flip_phase = true
 	
-	for i in range (4):
-		var player = players[i]
+	for player in players:
 		for j in range(4):
-			var card_instance = preload("res://scenes/Card.tscn").instantiate()
-			var card_str = shuffled_deck.pop_back()
-			var card_parts = card_str.split(":")
-			card_instance.suit = card_parts[0]
-			card_instance.rank = card_parts[1]
-			card_instance.value = values[card_parts[1]]
-			
-			var face_up = (i == current_player_index and j <2)
-			player.add_card(card_instance,face_up)
-			
+			var card = create_card_from_deck()
+			player.add_card(card,false)
+	
+	
 			
 	$DrawCardButton.disabled = false
 	$DiscardButton.disabled = false
@@ -178,7 +177,7 @@ func _on_start_game_button_pressed():
 func setup_players():
 	var screen_size = get_viewport_rect().size
 	var positions = [
-		Vector2(screen_size.x /2, 50),
+		Vector2(screen_size.x /3, 50),
 		Vector2(screen_size.x -100, screen_size.y /2),
 		Vector2(screen_size.x/2, screen_size.y -100),
 		Vector2(100, screen_size.y/2)
@@ -205,22 +204,85 @@ func setup_players():
 			players.append(player_instance)
 			add_child(player_instance)
 			player_instance.position = positions[i]
-			match i:
-				0: player_instance.rotation_degrees = 180
-				1: player_instance.rotation_degrees = -90
-				2: player_instance.rotation_degrees = 0
-				3: player_instance.rotation_degrees = 90
+		
+func deal_intial_2_cards():
+	for player in players:
+		for j in range(2):
+			var card_instance = preload("res://scenes/Card.tscn").instantiate()
+			var card_str = shuffled_deck.pop_back()
+			var card_parts = card_str.split(":")
+			card_instance.suit = card_parts[0]
+			card_instance.rank = card_parts[1]
+			card_instance.value = values[card_parts[1]]
 			
+			var face_up = (player == players[current_player_index])
+			player.add_card(card_instance, face_up)
+			
+			
+func _on_reveal_cards_button_pressed():
+	$RevealCards.visible = false 
+	game_started = true
+	
+	for i in range(players.size()):
+		deal_remaining_cards(players[i])
+	
+	$DrawCardButton.disabled = false
+	$SwapButton.disabled = false
+	$DiscardButton.disabled = false
+	
 func preview_initial_cards():
-	var player = players[current_player_index]
+	for player in players:
+		for j in range (2):
+			var card_instance = preload("res://scenes/Card.tscn").instantiate()
+			var card_str = shuffled_deck.pop_back()
+			var card_parts = card_str.split(":")
+			
+			card_instance.suit = card_parts[0]
+			card_instance.rank = card_parts[1]
+			card_instance.value = values[card_parts[1]]
+			
+			var face_up = (player == players[current_player_index])
+			player.add_card(card_instance, face_up)
+			
+
+func deal_remaining_cards(player):
 	for j in range(2):
 		var card_instance = preload("res://scenes/Card.tscn").instantiate()
 		var card_str = shuffled_deck.pop_back()
 		var card_parts = card_str.split(":")
+		
 		card_instance.suit = card_parts[0]
 		card_instance.rank = card_parts[1]
 		card_instance.value = values[card_parts[1]]
 		
-		var face_up = j < 2
-		player.add_card(card_instance, true)
+		player.add_card(card_instance, false)
 		
+		
+func advance_flip_phase():
+	flip_phase_index +=1
+	flip_count = 0
+	
+	if flip_phase_index >= players.size():
+		in_flip_phase = false
+		print("Flip phase completed")
+		$DrawCardButton.disabled = false
+		$SwapButton.disabled = false
+		$DiscardButton.disabled = false
+		current_player_index = 0 
+		
+	else:
+		print("player %d, flip2 cards" % flip_phase_index)
+		
+		
+func create_card_from_deck():
+	if shuffled_deck.is_empty():
+		print("deck empty")
+		return null
+		
+	var card_str = shuffled_deck.pop_back()
+	var card_parts = card_str.split(":")
+	var card = preload("res://scenes/Card.tscn").instantiate()
+	card.suit = card_parts[0]
+	card.rank = card_parts[1]
+	card.value = values[card_parts[1]]
+	return card
