@@ -44,6 +44,10 @@ offset_bottom = 463.0
 text = "reveal
 "
 
+[node name="MessageLabel" type="Label" parent="."]
+offset_right = 40.0
+offset_bottom = 23.0
+
 [connection signal="pressed" from="DrawCardButton" to="." method="_on_draw_card_button_pressed"]
 [connection signal="pressed" from="SwapButton" to="." method="_on_swap_button_pressed"]
 [connection signal="pressed" from="DiscardButton" to="." method="_on_discard_button_pressed"]

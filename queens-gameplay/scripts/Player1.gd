@@ -14,8 +14,6 @@ func add_card(card_instance: Node, face_up := false):
 	var index = hand.size() -1
 	
 	
-	var rot = int(round(rotation_degrees))
-	
 	card_instance.holding_player = self
 	card_instance.hand_index = index
 		

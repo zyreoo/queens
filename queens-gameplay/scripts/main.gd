@@ -17,6 +17,8 @@ var in_flip_phase = false
 var flip_phase_index = 0
 var flip_count = 0
 
+var allow_manual_flipping = true
+
 func _ready():
 	print("the main scene is ready")
 	
@@ -26,19 +28,51 @@ func _ready():
 	$DiscardButton.disabled = true
 	
 	setup_players()
+	initializate_center_card()
 	
 	
+func initializate_center_card():
 	var start_card_str = shuffled_deck.pop_back()
 	var start_card_parts = start_card_str.split(":")
-	var start_card = preload("res://scenes/Card.tscn").instantiate()
-	start_card.suit = start_card_parts[0]
-	start_card.rank = start_card_parts[1]
-	start_card.value = values[start_card_parts[1]]
+	center_card = preload("res://scenes/Card.tscn").instantiate()
+	center_card.suit = start_card_parts[0]
+	center_card.rank = start_card_parts[1]
+	center_card.value = values[start_card_parts[1]]
 	
-	add_child(start_card)
-	start_card.global_position = $CenterCardSlot.global_position
-	start_card.flip_card()
-	center_card = start_card
+	add_child(center_card)
+	center_card.global_position = $CenterCardSlot.global_position
+	center_card.flip_card()
+	
+	
+func setup_players():
+	var screen_size = get_viewport_rect().size
+	var positions = [
+		Vector2(screen_size.x /3, 50),
+		Vector2(screen_size.x -100, screen_size.y /2),
+		Vector2(screen_size.x/2, screen_size.y -100),
+		Vector2(100, screen_size.y/2)
+	]
+	
+
+	for suit in suits:
+		for rank in ranks:
+			deck.append("%s:%s" % [suit, rank])
+	shuffled_deck = deck.duplicate()
+	shuffled_deck.shuffle()
+
+	for i in range(4):
+		var player_scene = preload("res://scenes/Player.tscn")
+		var player_instance = player_scene.instantiate()
+		
+		match i:
+			0: player_instance.rotation_degrees = 180
+			1: player_instance.rotation_degrees = -90
+			2:player_instance.rotation_degrees = 0
+			3:player_instance.rotation_degrees = 90
+
+		players.append(player_instance)
+		add_child(player_instance)
+		player_instance.position = positions[i]
 	
 
 func deal_cards(player_instance):
@@ -70,11 +104,8 @@ func _on_discard_button_pressed():
 	print("Discarding: %s%s " % [drawn_card.rank, drawn_card.suit])
 
 	used_deck.append("%s:%s" % [drawn_card.suit, drawn_card.rank])
-
-	remove_child(drawn_card)
 	drawn_card.queue_free()
 	drawn_card = null 
-
 	next_turn()
 
 
@@ -84,12 +115,7 @@ func draw_card_for_current_player():
 		used_deck = []
 		deck.shuffle()
 
-	var card_str = deck.pop_back()
-	var card_parts = card_str.split(":")
-	drawn_card = preload("res://scenes/Card.tscn").instantiate()
-	drawn_card.suit = card_parts[0]
-	drawn_card.rank = card_parts[1]
-	drawn_card.value = values[card_parts[1]]
+	drawn_card = create_card_from_deck()
 	drawn_card.flip_card()
 	add_child(drawn_card)
 
@@ -111,7 +137,7 @@ func swap_card_with(clicked_card):
 	clicked_card.queue_free()
 
 	
-	if drawn_card.get_parent() != null:
+	if drawn_card.get_parent():
 		drawn_card.get_parent().remove_child(drawn_card)
 	
 	drawn_card.holding_player = player
@@ -134,7 +160,6 @@ func swap_card_with(clicked_card):
 	
 func play_card_to_center(card):
 	
-	
 	if center_card and center_card.is_inside_tree():
 		remove_child(center_card)
 		center_card.queue_free()
@@ -152,6 +177,15 @@ func play_card_to_center(card):
 	if not card.is_flipped:
 		card.flip_card()
 		
+	if card.rank == "13":
+		show_message("You played a King! Choose one of your cards to reveal.")
+		allow_manual_flipping = true 
+
+		await get_tree().create_timer(3.0).timeout 
+		allow_manual_flipping = false
+		
+		
+		
 	
 	next_turn()
 		
@@ -167,43 +201,7 @@ func _on_start_game_button_pressed():
 		for j in range(4):
 			var card = create_card_from_deck()
 			player.add_card(card,false)
-	
-	
-			
-	$DrawCardButton.disabled = false
-	$DiscardButton.disabled = false
-	$SwapButton.disabled = false
-	
-func setup_players():
-	var screen_size = get_viewport_rect().size
-	var positions = [
-		Vector2(screen_size.x /3, 50),
-		Vector2(screen_size.x -100, screen_size.y /2),
-		Vector2(screen_size.x/2, screen_size.y -100),
-		Vector2(100, screen_size.y/2)
-	]
-	
 
-	for suit in suits:
-		for rank in ranks:
-			deck.append("%s:%s" % [suit, rank])
-	shuffled_deck = deck.duplicate()
-	shuffled_deck.shuffle()
-
-	for i in range(4):
-		var player_scene = preload("res://scenes/Player.tscn")
-		var player_instance = player_scene.instantiate()
-		
-		match i:
-			0: player_instance.rotation_degrees = 180
-			1: player_instance.rotation_degrees = -90
-			2:player_instance.rotation_degrees = 0
-			3:player_instance.rotation_degrees = 90
-
-		if player_instance:
-			players.append(player_instance)
-			add_child(player_instance)
-			player_instance.position = positions[i]
 		
 func deal_intial_2_cards():
 	for player in players:
@@ -222,9 +220,7 @@ func deal_intial_2_cards():
 func _on_reveal_cards_button_pressed():
 	$RevealCards.visible = false 
 	game_started = true
-	
-	for i in range(players.size()):
-		deal_remaining_cards(players[i])
+	in_flip_phase = false
 	
 	$DrawCardButton.disabled = false
 	$SwapButton.disabled = false
@@ -262,17 +258,22 @@ func advance_flip_phase():
 	flip_phase_index +=1
 	flip_count = 0
 	
-	if flip_phase_index >= players.size():
+	if flip_phase_index < players.size():
+		show_message("Player %d : flip cards" % (flip_phase_index +1))
+	
+	else:
 		in_flip_phase = false
-		print("Flip phase completed")
+		show_message("game starts! player 1's turn.")
+		
+		await get_tree().create_timer(1.2).timeout
+		hide_all_flipped_cards()
+		
+		allow_manual_flipping = false
+		game_started = true
+		current_player_index = 0
 		$DrawCardButton.disabled = false
 		$SwapButton.disabled = false
 		$DiscardButton.disabled = false
-		current_player_index = 0 
-		
-	else:
-		print("player %d, flip2 cards" % flip_phase_index)
-		
 		
 func create_card_from_deck():
 	if shuffled_deck.is_empty():
@@ -286,3 +287,19 @@ func create_card_from_deck():
 	card.rank = card_parts[1]
 	card.value = values[card_parts[1]]
 	return card
+
+func show_message(text):
+	$MessageLabel.text = text
+	
+	
+func increment_flip_count():
+	flip_count += 1
+	if flip_count ==2:
+		advance_flip_phase()
+		
+		
+func hide_all_flipped_cards():
+	for player in players:
+		for card in player.hand:
+			if card.is_flipped:
+				card.flip_card()
