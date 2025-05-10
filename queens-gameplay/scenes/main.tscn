@@ -11,12 +11,14 @@ offset_left = 763.0
 offset_top = 469.0
 offset_right = 891.0
 offset_bottom = 583.0
+text = "draw"
 
 [node name="SwapButton" type="Button" parent="."]
 offset_left = 1182.0
 offset_top = 437.0
 offset_right = 1423.0
 offset_bottom = 677.0
+text = "swap"
 
 [node name="DiscardButton" type="Button" parent="."]
 offset_left = 969.0
@@ -27,6 +29,14 @@ offset_bottom = 592.0
 [node name="CenterCardSlot" type="Node2D" parent="."]
 position = Vector2(1025, 687)
 
+[node name="StartGameButton" type="Button" parent="."]
+offset_left = 953.0
+offset_top = 335.0
+offset_right = 1049.0
+offset_bottom = 366.0
+text = "Start Game"
+
 [connection signal="pressed" from="DrawCardButton" to="." method="_on_draw_card_button_pressed"]
 [connection signal="pressed" from="SwapButton" to="." method="_on_swap_button_pressed"]
 [connection signal="pressed" from="DiscardButton" to="." method="_on_discard_button_pressed"]
+[connection signal="pressed" from="StartGameButton" to="." method="_on_start_game_button_pressed"]

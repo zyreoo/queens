@@ -12,48 +12,30 @@ var values = {"2": 2, "3": 3, "4": 4, "5": 5, "6": 6, "7": 7, "8": 8, "9": 9, "1
 var drawn_card = null 
 var swap_mode = false
 var center_card = null
+var game_started = false
 
 func _ready():
 	print("the main scene is ready")
-
-	var screen_size = get_viewport_rect().size
-	var positions = [
-		Vector2(screen_size.x /2, 50),
-		Vector2(screen_size.x -100, screen_size.y /2),
-		Vector2(screen_size.x/2, screen_size.y -100),
-		Vector2(100, screen_size.y/2)
-	]
 	
-
-	for suit in suits:
-		for rank in ranks:
-			deck.append("%s:%s" % [suit, rank])
-	shuffled_deck = deck.duplicate()
-	shuffled_deck.shuffle()
-
-	for i in range(4):
-		var player_scene = preload("res://scenes/Player.tscn")
-		var player_instance = player_scene.instantiate()
-		
-		match i:
-			0: player_instance.rotation_degrees = 180
-			1: player_instance.rotation_degrees = -90
-			2:player_instance.rotation_degrees = 0
-			3:player_instance.rotation_degrees = 90
-
-		if player_instance:
-			players.append(player_instance)
-			add_child(player_instance)
-			player_instance.position = positions[i]
-			match i:
-				0: player_instance.rotation_degrees = 180
-				1: player_instance.rotation_degrees = -90
-				2: player_instance.rotation_degrees = 0
-				3: player_instance.rotation_degrees = 90
-			deal_cards(player_instance)
-			
-	place_start_card()
-			
+	$StartGameButton.visible = true
+	$DrawCardButton.disabled = true
+	$SwapButton.disabled = true
+	$DiscardButton.disabled = true
+	
+	setup_players()
+	preview_initial_cards()
+	
+	
+	var start_card_str = shuffled_deck.pop_back()
+	var start_card_parts = start_card_str.split(":")
+	var start_card = preload("res://scenes/Card.tscn").instantiate()
+	start_card.suit = start_card_parts[0]
+	start_card.rank = start_card_parts[1]
+	
+	add_child(start_card)
+	start_card.global_position = $CenterCardSlot.global_position
+	start_card.flip_card()
+	center_card = start_card
 			
 
 func deal_cards(player_instance):
@@ -114,28 +96,7 @@ func _on_swap_button_pressed():
 		return
 	swap_mode = true
 	print("Swap activated")
-	
 
-func place_start_card():
-	if deck.size() == 0:
-		deck = used_deck
-		used_deck =[]
-		deck.shuffle()
-		
-	var card_instance = preload("res://scenes/Card.tscn").instantiate()
-	var card_str = deck.pop_back()
-	var card_parts = card_str.split(":")
-	card_instance.suit = card_parts[0]
-	card_instance.rank = card_parts[1]
-	card_instance.value = values[card_parts[1]]
-	card_instance.flip_card()
-	card_instance.position = Vector2(600, 300)
-	
-	card_instance.flip_card()
-	
-	print(card_instance)
-	add_child(card_instance)
-	used_deck.append(card_str)
 	
 
 func swap_card_with(clicked_card):
@@ -183,6 +144,83 @@ func play_card_to_center(card):
 	
 	card.set_process(false)
 	card.set_mouse_filter(Control.MOUSE_FILTER_IGNORE)
+	
+	
 	if not card.is_flipped:
 		card.flip_card()
+		
 	
+	next_turn()
+		
+		
+func _on_start_game_button_pressed():
+	game_started = true
+	$StartGameButton.visible = false
+	
+	for i in range (4):
+		var player = players[i]
+		for j in range(4):
+			var card_instance = preload("res://scenes/Card.tscn").instantiate()
+			var card_str = shuffled_deck.pop_back()
+			var card_parts = card_str.split(":")
+			card_instance.suit = card_parts[0]
+			card_instance.rank = card_parts[1]
+			card_instance.value = values[card_parts[1]]
+			
+			var face_up = (i == current_player_index and j <2)
+			player.add_card(card_instance,face_up)
+			
+			
+	$DrawCardButton.disabled = false
+	$DiscardButton.disabled = false
+	$SwapButton.disabled = false
+	
+func setup_players():
+	var screen_size = get_viewport_rect().size
+	var positions = [
+		Vector2(screen_size.x /2, 50),
+		Vector2(screen_size.x -100, screen_size.y /2),
+		Vector2(screen_size.x/2, screen_size.y -100),
+		Vector2(100, screen_size.y/2)
+	]
+	
+
+	for suit in suits:
+		for rank in ranks:
+			deck.append("%s:%s" % [suit, rank])
+	shuffled_deck = deck.duplicate()
+	shuffled_deck.shuffle()
+
+	for i in range(4):
+		var player_scene = preload("res://scenes/Player.tscn")
+		var player_instance = player_scene.instantiate()
+		
+		match i:
+			0: player_instance.rotation_degrees = 180
+			1: player_instance.rotation_degrees = -90
+			2:player_instance.rotation_degrees = 0
+			3:player_instance.rotation_degrees = 90
+
+		if player_instance:
+			players.append(player_instance)
+			add_child(player_instance)
+			player_instance.position = positions[i]
+			match i:
+				0: player_instance.rotation_degrees = 180
+				1: player_instance.rotation_degrees = -90
+				2: player_instance.rotation_degrees = 0
+				3: player_instance.rotation_degrees = 90
+			
+func preview_initial_cards():
+	var player = players[current_player_index]
+	for j in range(2):
+		var card_instance = preload("res://scenes/Card.tscn").instantiate()
+		var card_str = shuffled_deck.pop_back()
+		var card_parts = card_str.split(":")
+		card_instance.suit = card_parts[0]
+		card_instance.rank = card_parts[1]
+		card_instance.value = values[card_parts[1]]
+		
+		var face_up = j < 2
+		player.add_card(card_instance, true)
+		
