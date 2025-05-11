@@ -25,10 +25,10 @@ func add_card(card_instance: Node, face_up := false):
 		
 	arrange_hand()
 	
-	
+			
 func arrange_hand():
-	var spacing_horizontal = 140
-	var spacing_vertical = 180
+	var spacing_horizontal = 120
+	var spacing_vertical = 120
 	var total_cards = hand.size()
 	var center_offset = (total_cards - 1) /2.0
 	var rot = int(round(rotation_degrees))
@@ -37,24 +37,22 @@ func arrange_hand():
 		var card = hand[i]
 		if not is_instance_valid(card):
 			continue
-			
 		card.hand_index = i
 		
-
+	
 		match rot:
-			90:
-				card.rotation_degrees = -90
-				card.position = Vector2(spacing_vertical * (i - center_offset), 0)
-			-90:
-				card.rotation_degrees = 90
-				card.position = Vector2(-spacing_vertical * (i - center_offset), 0)
+			0:
+				card.rotation_degrees = 0
+				card.position = Vector2(spacing_horizontal * (i - center_offset),0)
 			180, -180:
 				card.rotation_degrees = 180
 				card.position = Vector2(-spacing_horizontal * (i - center_offset), 0)
-			_:
-				card.rotation_degrees = 0
-				card.position = Vector2(spacing_horizontal * (i - center_offset), 0)
-		
+			90:
+				card.rotation_degrees = 90
+				card.position = Vector2(0, spacing_vertical * (i - center_offset))
+			-90:
+				card.rotation_degrees = 90
+				card.position = Vector2(0, -spacing_vertical * (i - center_offset))
 
 
 func calculate_score(_values_dict):

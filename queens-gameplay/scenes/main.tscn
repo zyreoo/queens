@@ -7,7 +7,7 @@ position = Vector2(-1, 1)
 script = ExtResource("1_pcy04")
 
 [node name="CenterCardSlot" type="Node2D" parent="."]
-position = Vector2(1025, 687)
+position = Vector2(1004, 406)
 
 [node name="StartGameButton" type="Button" parent="."]
 offset_left = 953.0

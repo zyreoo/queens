@@ -8,7 +8,6 @@ var current_player_index = 0
 var suits = ["Clubs", "Spades", "Diamonds", "Hearts"]
 var ranks = ["2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "13", "12", "14"]
 var values = {"2": 2, "3": 3, "4": 4, "5": 5, "6": 6, "7": 7, "8": 8, "9": 9, "10": 10, "11": 11, "12": 12, "13": 13, "14": 14}
-
 var drawn_card = null 
 var swap_mode = false
 var center_card = null
@@ -17,6 +16,13 @@ var in_flip_phase = false
 var flip_phase_index = 0
 var flip_count = 0
 var flipped_this_turn = 0
+var jack_swap_mode = false
+var awaiting_king_reveal = false
+var jack_swap_timer = null
+var jack_swap_selection = {
+	"from" : null,
+	"to" : null
+}
 
 var allow_manual_flipping = true
 
@@ -39,15 +45,15 @@ func initializate_center_card():
 	
 	add_child(center_card)
 	center_card.global_position = $CenterCardSlot.global_position
-	center_card.flip_card()
+	center_card.flip_card(true)
 	
 	
 func setup_players():
 	var screen_size = get_viewport_rect().size
 	var positions = [
-		Vector2(screen_size.x /3, 50),
-		Vector2(screen_size.x -100, screen_size.y /2),
-		Vector2(screen_size.x/2, screen_size.y -100),
+		Vector2(screen_size.x /2, 100),
+		Vector2(screen_size.x - 100, screen_size.y /2),
+		Vector2(screen_size.x/2, screen_size.y -200),
 		Vector2(100, screen_size.y/2)
 	]
 	
@@ -63,10 +69,10 @@ func setup_players():
 		var player_instance = player_scene.instantiate()
 		
 		match i:
-			0: player_instance.rotation_degrees = 180
-			1: player_instance.rotation_degrees = -90
-			2:player_instance.rotation_degrees = 0
-			3:player_instance.rotation_degrees = 90
+			0: player_instance.rotation_degrees = 0
+			1: player_instance.rotation_degrees = 90
+			2:player_instance.rotation_degrees = 180
+			3:player_instance.rotation_degrees = -90
 
 		players.append(player_instance)
 		add_child(player_instance)
@@ -134,6 +140,14 @@ func play_card_to_center(card):
 		center_card.queue_free()
 	
 	center_card = card
+	
+	if card.holding_player != null:
+		var index = card.hand_index
+		if index >= 0 and index < card.holding_player.hand.size():
+			card.holding_player.hand.remove_at(index)
+			card.holding_player.arrange_hand()
+
+	
 	card.get_parent().remove_child(card)
 		
 	add_child(card)
@@ -150,9 +164,27 @@ func play_card_to_center(card):
 	if card.rank == "13":
 		show_message("You played a King! Choose one of your cards to reveal.")
 		allow_manual_flipping = true 
+		awaiting_king_reveal = true
 
 		await get_tree().create_timer(3.0).timeout 
 		allow_manual_flipping = false
+		
+		if awaiting_king_reveal:
+			allow_manual_flipping = false
+			awaiting_king_reveal = false
+		
+	if card.rank == "11":
+		show_message("you played a jack! you can swap in within 4 seconds")
+		jack_swap_mode = true
+		jack_swap_selection["from"] = null
+		jack_swap_selection["to"] = null
+		jack_swap_timer = get_tree().create_timer(15.0)
+		await jack_swap_timer.timeout
+		if jack_swap_mode:
+			jack_swap_mode = false
+			show_message("timeout")
+			next_turn()
+			return
 	
 	next_turn()
 		
@@ -169,6 +201,10 @@ func _on_start_game_button_pressed():
 		for j in range(4):
 			var card = create_card_from_deck()
 			player.add_card(card,false)
+	
+	game_started = true
+	current_player_index = 0
+	await give_and_hide_card(players[current_player_index])
 
 		
 func handle_initial_flip():
@@ -254,6 +290,8 @@ func give_and_hide_card(player):
 	
 	await get_tree().create_timer(1.5).timeout
 	
+	card.flip_card(false)
+	
 	player.add_card(card, false)
 	
 		
@@ -272,4 +310,43 @@ func hide_all_flipped_cards():
 		for card in player.hand:
 			if is_instance_valid(card) and card.is_flipped:
 				card.flip_card()
+				
+func execute_jack_swap():
+	jack_swap_mode = false
+	var from_card = jack_swap_selection["from"]
+	var to_card = jack_swap_selection["to"]
+	if from_card == null or to_card==null:
+		return
+		
+	from_card.modulate = Color(1,1,1)
+	to_card.modulate = Color(1,1,1)
+	
+	var from_player = from_card.holding_player
+	var to_player = to_card.holding_player
+	var from_index = from_card.hand_index
+	var to_index = to_card.hand_index
+	
+	from_player.hand[from_index] = to_card
+	to_player.hand[to_index] = from_card
+	
+	to_card.holding_player = from_player
+	to_card.hand_index = from_index
+	
+	from_card.holding_player = to_player
+	from_card.hand_index = to_index
+	
+	if from_card.get_parent():
+		from_card.get_parent().remove_child(from_card)
+	if to_card.get_parent():
+		to_card.get_parent().remove_child(to_card)
+	
+	from_player.add_child(to_card)
+	to_player.add_child(from_card)
+	
+	from_player.arrange_hand()
+	to_player.arrange_hand()
+	
+	show_message("swap done")
+	await get_tree().create_timer(1.0).timeout
+	next_turn()
 				
