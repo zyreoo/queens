@@ -6,26 +6,6 @@
 position = Vector2(-1, 1)
 script = ExtResource("1_pcy04")
 
-[node name="DrawCardButton" type="Button" parent="."]
-offset_left = 763.0
-offset_top = 469.0
-offset_right = 891.0
-offset_bottom = 583.0
-text = "draw"
-
-[node name="SwapButton" type="Button" parent="."]
-offset_left = 1182.0
-offset_top = 437.0
-offset_right = 1423.0
-offset_bottom = 677.0
-text = "swap"
-
-[node name="DiscardButton" type="Button" parent="."]
-offset_left = 969.0
-offset_top = 540.0
-offset_right = 1050.0
-offset_bottom = 592.0
-
 [node name="CenterCardSlot" type="Node2D" parent="."]
 position = Vector2(1025, 687)
 
@@ -36,20 +16,8 @@ offset_right = 1049.0
 offset_bottom = 366.0
 text = "Start Game"
 
-[node name="RevealCards" type="Button" parent="."]
-offset_left = 1010.0
-offset_top = 404.0
-offset_right = 1079.0
-offset_bottom = 463.0
-text = "reveal
-"
-
 [node name="MessageLabel" type="Label" parent="."]
 offset_right = 40.0
 offset_bottom = 23.0
 
-[connection signal="pressed" from="DrawCardButton" to="." method="_on_draw_card_button_pressed"]
-[connection signal="pressed" from="SwapButton" to="." method="_on_swap_button_pressed"]
-[connection signal="pressed" from="DiscardButton" to="." method="_on_discard_button_pressed"]
 [connection signal="pressed" from="StartGameButton" to="." method="_on_start_game_button_pressed"]
-[connection signal="pressed" from="RevealCards" to="." method="_on_reveal_cards_pressed"]

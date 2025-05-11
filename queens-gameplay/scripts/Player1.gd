@@ -8,14 +8,17 @@ var hand = []
 var score = 0
 
 func add_card(card_instance: Node, face_up := false):
-	hand.append(card_instance)
-	add_child(card_instance)
 	
-	var index = hand.size() -1
+	if card_instance.get_parent():
+		card_instance.get_parent().remove_child(card_instance)
+		
+		
+	add_child(card_instance)
+	hand.append(card_instance)
 	
 	
 	card_instance.holding_player = self
-	card_instance.hand_index = index
+	card_instance.hand_index = hand.size() - 1
 		
 	if face_up:
 		card_instance.flip_card()
@@ -32,7 +35,11 @@ func arrange_hand():
 		
 	for i in range(total_cards):
 		var card = hand[i]
+		if not is_instance_valid(card):
+			continue
+			
 		card.hand_index = i
+		
 
 		match rot:
 			90:
