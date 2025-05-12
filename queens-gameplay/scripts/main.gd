@@ -6,8 +6,8 @@ var deck = []
 var used_deck = []
 var current_player_index = 0
 var suits = ["Clubs", "Spades", "Diamonds", "Hearts"]
-var ranks = ["2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "13", "12", "14"]
-var values = {"2": 2, "3": 3, "4": 4, "5": 5, "6": 6, "7": 7, "8": 8, "9": 9, "10": 10, "11": 11, "12": 12, "13": 13, "14": 14}
+var ranks = ["1","2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "13", "12"]
+var values = {"1":1 ,"2": 2, "3": 3, "4": 4, "5": 5, "6": 6, "7": 7, "8": 8, "9": 9, "10": 10, "11": 11, "12": 12, "13": 13}
 var drawn_card = null 
 var swap_mode = false
 var center_card = null
@@ -24,6 +24,10 @@ var jack_swap_selection = {
 	"to" : null
 }
 
+var reaction_mode = false
+var reaction_value = null
+var reacting_players = []
+
 var allow_manual_flipping = true
 
 func _ready():
@@ -32,7 +36,6 @@ func _ready():
 	$StartGameButton.visible = true
 	
 	setup_players()
-	initializate_center_card()
 	
 	
 func initializate_center_card():
@@ -134,11 +137,17 @@ func swap_card_with(clicked_card):
 	
 	
 func play_card_to_center(card):
+	var is_current_players_turn = card.holding_player == players[current_player_index]
 	
-	if center_card and center_card.is_inside_tree():
+	if not reaction_mode and not is_current_players_turn:
+		show_message("not ur turn")
+		return
+		
+		
+	if reaction_mode and center_card.is_inside_tree():
 		center_card.get_parent().remove_child(center_card)
 		center_card.queue_free()
-	
+		
 	center_card = card
 	
 	if card.holding_player != null:
@@ -147,7 +156,6 @@ func play_card_to_center(card):
 			card.holding_player.hand.remove_at(index)
 			card.holding_player.arrange_hand()
 
-	
 	card.get_parent().remove_child(card)
 		
 	add_child(card)
@@ -168,24 +176,56 @@ func play_card_to_center(card):
 
 		await get_tree().create_timer(3.0).timeout 
 		allow_manual_flipping = false
-		
 		if awaiting_king_reveal:
 			allow_manual_flipping = false
 			awaiting_king_reveal = false
+		return
 		
 	if card.rank == "11":
 		show_message("you played a jack! you can swap in within 4 seconds")
 		jack_swap_mode = true
 		jack_swap_selection["from"] = null
 		jack_swap_selection["to"] = null
-		jack_swap_timer = get_tree().create_timer(15.0)
+		jack_swap_timer = get_tree().create_timer(4.0)
 		await jack_swap_timer.timeout
 		if jack_swap_mode:
 			jack_swap_mode = false
 			show_message("timeout")
 			next_turn()
-			return
-	
+		return
+		
+	elif card.rank == "12":
+		show_message("you played a queen")
+		
+		if card.holding_player != null:
+			var index = card.hand_index
+			if index >= 0 and index < card.holding_player.hand.size():
+				card.holding_player.hand.remove_at(index)
+				card.holding_player.arrange_hand()
+				
+		if card.get_parent():
+			card.get_parent().remove_child(card)
+			
+		var next_player_index = (current_player_index + 1) % players.size()
+		var next_player = players[next_player_index]
+		next_player.add_card(card, false)
+		
+		await get_tree().create_timer(0.8).timeout
+		next_turn()
+		return
+			
+	if card.rank != "13" and card.rank != "11" and card.rank != "12":
+		reaction_value = card.value
+		reaction_mode = true
+		reacting_players.clear()
+		show_message("match")
+		
+		await get_tree().create_timer(3.0).timeout
+		reaction_mode = false
+		reaction_value = null
+		
+		next_turn()
+		
 	next_turn()
 		
 		
@@ -204,7 +244,6 @@ func _on_start_game_button_pressed():
 	
 	game_started = true
 	current_player_index = 0
-	await give_and_hide_card(players[current_player_index])
 
 		
 func handle_initial_flip():
@@ -258,13 +297,17 @@ func advance_flip_phase():
 	
 	else:
 		in_flip_phase = false
-		
+
 		await get_tree().create_timer(1.0).timeout
 		hide_all_flipped_cards()
 		current_player_index = 0
 		game_started = true
 		show_message("game starts! player 1's turn.")
 		
+		initializate_center_card()
+		await give_and_hide_card(players[current_player_index])
+
+
 func create_card_from_deck():
 	if shuffled_deck.is_empty():
 		print("deck empty")
@@ -277,7 +320,8 @@ func create_card_from_deck():
 	card.rank = card_parts[1]
 	card.value = values[card_parts[1]]
 	return card
-			
+
+
 func give_and_hide_card(player):
 	var card = create_card_from_deck()
 	if card == null:
@@ -349,4 +393,10 @@ func execute_jack_swap():
 	show_message("swap done")
 	await get_tree().create_timer(1.0).timeout
 	next_turn()
+	
+func give_penalty_card(player):
+	var card = create_card_from_deck()
+	if card == null:
+		return
+	player.add_card(card, false)
 				

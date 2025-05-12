@@ -73,9 +73,29 @@ func _on_card_clicked():
 		
 	if not main.allow_manual_flipping and not main.in_flip_phase and not main.jack_swap_mode:
 		return
+	
+	if main.reaction_mode:
+		if holding_player == main.players[main.current_player_index]:
+			return
+		
+		if holding_player in main.reacting_players:
+			return
+		
+		main.reacting_players.append(holding_player)
+		
+		if value == main.reaction_value:
+			main.play_card_to_center(self)
+			
+		else:
+			main.show_message("penalty ")
+			var player = holding_player
+			if player != null:
+				player.hand.erase(self)
+				queue_free()
+				await get_tree().create_timer(0.5).timeout
+				main.give_penalty_card(player)
 
-	
-	
+
 func flip_card(state := false):
 	var main = get_tree().get_root().get_node("Main")
 	
@@ -123,9 +143,7 @@ func _gui_input(event):
 	
 	if main.in_flip_phase:
 		return 
-
-	if holding_player != main.players[main.current_player_index]:
-		return
+		
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 		if event.pressed:
 			is_dragging = true
@@ -141,12 +159,10 @@ func _gui_input(event):
 			else:
 				if holding_player and holding_player.has_method("arrange_hand"):
 					holding_player.arrange_hand
-				
-	if holding_player.hand.size() <= 1:
-		print("You cant play your last card!")
-		return
 		
-		
+	if holding_player != null and holding_player.hand.size() <=1:
+		main.show_message("you cant play this card")
+
 func _process(delta):
 	if is_dragging:
 		global_position = get_global_mouse_position() + drag_offset
@@ -154,16 +170,4 @@ func _process(delta):
 	if holding_player and holding_player.hand.size() <= 1:
 		is_dragging = false
 		return 
-
-func play_card_to_center(card):
-	if card.get_parent():
-		card.get_parent().remove_child(card)
-		
-		
-	add_child(card)
-	card.flip_card(true)
-	card.global_position  = $CenterCardSlot.global_position
-	card.set_process(false)
-
-	
 		
