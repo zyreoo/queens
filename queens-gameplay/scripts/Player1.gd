@@ -7,6 +7,13 @@ extends Node2D
 var hand = []
 var score = 0
 
+
+func _ready():
+	if not multiplayer.is_local_peer(get_multiplayer_authority()):
+		visible = false
+
+
+
 func add_card(card_instance: Node, face_up := false):
 	
 	if card_instance.get_parent():

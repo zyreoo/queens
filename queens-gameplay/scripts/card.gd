@@ -14,13 +14,15 @@ var is_dragging = false
 var drag_offset = Vector2()
 
 
+@rpc("any_peer")
+func rpc_flip_card():
+	flip_card(true)
+
 func _ready():
 	
 	var front_image_path = "res://assets/%s %s.png" % [suit, rank]
 	front_texture = load(front_image_path)
-	
 	self.texture_normal = card_back_texture
-	
 	connect("pressed", Callable(self, "_on_card_clicked"))
 
 
@@ -34,6 +36,11 @@ func _on_card_clicked():
 		
 	if is_flipped and not main.in_flip_phase:
 		return
+	
+	if multiplayer.get_unique_id() != get_multiplayer_authority():
+		return
+		
+	rpc("rpc_flip_card")
 	
 	if main.jack_swap_mode:
 		if main.jack_swap_selection["from"] == null:
@@ -87,15 +94,31 @@ func _on_card_clicked():
 			main.play_card_to_center(self)
 			
 		else:
-			main.show_message("penalty ")
 			var player = holding_player
-			if player != null:
-				player.hand.erase(self)
-				queue_free()
+			if player:
+				main.show_message("penalty card")
+				
+				if self.get_parent() != player:
+					self.get_parent().remove_child(self)
+					player.add_child(self)
+					
+				if not player.hand.has(self):
+					player.hand.append(self)
+					
+				self.holding_player = player
+				self.hand_index = player.hand.size() - 1 
+				
+				self.modulate = Color(1,1,1)
+				self.rotation_degrees = player.rotation_degrees
+				
+				player.arrange_hand()
+				
 				await get_tree().create_timer(0.5).timeout
+				
 				main.give_penalty_card(player)
-
-
+			return 
+				
+		return
 func flip_card(state := false):
 	var main = get_tree().get_root().get_node("Main")
 	
@@ -141,6 +164,11 @@ func flip_card(state := false):
 func _gui_input(event):
 	var main = get_tree().get_root().get_node("Main")
 	
+	
+	if multiplayer.get_unique_id() != get_multiplayer_authority():
+		return
+	
+	
 	if main.in_flip_phase:
 		return 
 		
@@ -150,15 +178,21 @@ func _gui_input(event):
 			drag_offset = global_position - event.global_position
 		else:
 			is_dragging = false
-
+			
+			
 			var center = main.get_node("CenterCardSlot")
+			
+			if center == null:
+				print("CenterCardSlot not found")
+				return
+			
 			var center_pos = center.global_position
-		
-			if global_position.distance_to(center_pos) < 250:
+			
+			if global_position.distance_to(center_pos) < 350:
 				main.play_card_to_center(self)
 			else:
 				if holding_player and holding_player.has_method("arrange_hand"):
-					holding_player.arrange_hand
+					holding_player.arrange_hand()
 		
 	if holding_player != null and holding_player.hand.size() <=1:
 		main.show_message("you cant play this card")

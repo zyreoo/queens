@@ -30,6 +30,8 @@ var reacting_players = []
 
 var allow_manual_flipping = true
 
+var peer: WebSocketMultiplayerPeer
+
 func _ready():
 	print("the main scene is ready")
 	
@@ -66,20 +68,27 @@ func setup_players():
 				deck.append("%s:%s" % [suit, rank])
 		shuffled_deck = deck.duplicate()
 		shuffled_deck.shuffle()
-
-	for i in range(4):
+		
+		
+	var peer_ids = multiplayer.get_peers()
+	peer_ids.insert(0, multiplayer.get_unique_id())
+	
+	
+	for i in range (peer_ids.size()):
 		var player_scene = preload("res://scenes/Player.tscn")
 		var player_instance = player_scene.instantiate()
+		var peer_id = peer_ids[i]
+		player_instance.set_multiplayer_authority(peer_id)
+		
+		players.append(player_instance)
+		add_child(player_instance)
+		player_instance.position = positions[i]
 		
 		match i:
 			0: player_instance.rotation_degrees = 0
 			1: player_instance.rotation_degrees = 90
 			2:player_instance.rotation_degrees = 180
 			3:player_instance.rotation_degrees = -90
-
-		players.append(player_instance)
-		add_child(player_instance)
-		player_instance.position = positions[i]
 	
 
 func deal_cards(player_instance):
@@ -143,32 +152,35 @@ func play_card_to_center(card):
 		show_message("not ur turn")
 		return
 		
-		
-	if reaction_mode and center_card.is_inside_tree():
+	var was_current_player = is_current_players_turn
+
+	if  center_card and center_card.is_inside_tree():
 		center_card.get_parent().remove_child(center_card)
+		used_deck.append("%s:%s" % [center_card.suit, center_card.rank])
 		center_card.queue_free()
 		
 	center_card = card
 	
-	if card.holding_player != null:
+	if card.holding_player:
 		var index = card.hand_index
 		if index >= 0 and index < card.holding_player.hand.size():
 			card.holding_player.hand.remove_at(index)
 			card.holding_player.arrange_hand()
-
-	card.get_parent().remove_child(card)
-		
+			
+	if card.get_parent():
+		card.get_parent().remove_child(card)
 	add_child(card)
 	
+	card.rotation_degrees = 0
+	card.scale = Vector2.ONE
 	card.global_position = $CenterCardSlot.global_position
-	
 	card.set_process(false)
 	card.set_mouse_filter(Control.MOUSE_FILTER_IGNORE)
 	
 	
 	if not card.is_flipped:
 		card.flip_card(true)
-		
+	
 	if card.rank == "13":
 		show_message("You played a King! Choose one of your cards to reveal.")
 		allow_manual_flipping = true 
@@ -176,12 +188,12 @@ func play_card_to_center(card):
 
 		await get_tree().create_timer(3.0).timeout 
 		allow_manual_flipping = false
-		if awaiting_king_reveal:
-			allow_manual_flipping = false
-			awaiting_king_reveal = false
+		awaiting_king_reveal = false
+		if was_current_player:
+			next_turn()
 		return
 		
-	if card.rank == "11":
+	elif card.rank == "11":
 		show_message("you played a jack! you can swap in within 4 seconds")
 		jack_swap_mode = true
 		jack_swap_selection["from"] = null
@@ -194,27 +206,20 @@ func play_card_to_center(card):
 			next_turn()
 		return
 		
-	elif card.rank == "12":
+	if card.rank == "12":
 		show_message("you played a queen")
-		
-		if card.holding_player != null:
-			var index = card.hand_index
-			if index >= 0 and index < card.holding_player.hand.size():
-				card.holding_player.hand.remove_at(index)
-				card.holding_player.arrange_hand()
-				
-		if card.get_parent():
-			card.get_parent().remove_child(card)
-			
 		var next_player_index = (current_player_index + 1) % players.size()
 		var next_player = players[next_player_index]
-		next_player.add_card(card, false)
 		
+		if card.get_parent():
+			card.get_parent().remove_child(card)
+		
+		next_player.add_card(card, false)
 		await get_tree().create_timer(0.8).timeout
 		next_turn()
-		return
+		return 
 			
-	if card.rank != "13" and card.rank != "11" and card.rank != "12":
+	if card.rank not in ["11", "12", "13"]:
 		reaction_value = card.value
 		reaction_mode = true
 		reacting_players.clear()
@@ -224,10 +229,14 @@ func play_card_to_center(card):
 		reaction_mode = false
 		reaction_value = null
 		
+		show_message("reaction window closed.")
+		
+		if was_current_player:
+			next_turn()
+		return
+		
+	if was_current_player:
 		next_turn()
-		
-	next_turn()
-		
 		
 func _on_start_game_button_pressed():
 	game_started = false
@@ -241,7 +250,6 @@ func _on_start_game_button_pressed():
 		for j in range(4):
 			var card = create_card_from_deck()
 			player.add_card(card,false)
-	
 	game_started = true
 	current_player_index = 0
 
@@ -308,7 +316,7 @@ func advance_flip_phase():
 		await give_and_hide_card(players[current_player_index])
 
 
-func create_card_from_deck():
+func create_card_from_deck(player: Node = null):
 	if shuffled_deck.is_empty():
 		print("deck empty")
 		return null
@@ -319,6 +327,10 @@ func create_card_from_deck():
 	card.suit = card_parts[0]	
 	card.rank = card_parts[1]
 	card.value = values[card_parts[1]]
+
+	if player:
+		card.set_multiplayer_authority(player.get_multiplayer_authority())
+		
 	return card
 
 
@@ -396,7 +408,36 @@ func execute_jack_swap():
 	
 func give_penalty_card(player):
 	var card = create_card_from_deck()
-	if card == null:
-		return
-	player.add_card(card, false)
+	if card:
+		player.add_card(card, false)
 				
+
+
+func _on_host_button_pressed():
+	var peer = WebSocketMultiplayerPeer.new()
+	
+	var result = peer.create_server(12345)
+	
+	if result != OK:
+		print("Failed to start the server")
+		return
+		
+	multiplayer.multiplayer_peer = peer
+	show_message(" hosting on port 12345")
+	print("hosting on port 12345")
+	
+	
+
+
+func _on_join_game_pressed():
+	var ip = $IPAddressInput.text
+	var peer = WebSocketMultiplayerPeer.new()
+	var result = peer.create_client("ws://" + ip + ":12345")
+	
+	if result != OK:
+		print("failed to connect")
+		return
+		
+	multiplayer.multiplayer_peer = peer
+	print("Connected to server")
+	

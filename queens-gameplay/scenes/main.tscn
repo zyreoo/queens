@@ -20,4 +20,27 @@ text = "Start Game"
 offset_right = 40.0
 offset_bottom = 23.0
 
+[node name="HostButton" type="Button" parent="."]
+offset_left = 873.0
+offset_top = 379.0
+offset_right = 963.0
+offset_bottom = 420.0
+text = "host
+"
+
+[node name="IPAddressInput" type="LineEdit" parent="."]
+offset_left = 963.0
+offset_top = 452.0
+offset_right = 1168.0
+offset_bottom = 501.0
+
+[node name="JoinGame" type="Button" parent="."]
+offset_left = 889.0
+offset_top = 184.0
+offset_right = 947.0
+offset_bottom = 248.0
+text = "join"
+
 [connection signal="pressed" from="StartGameButton" to="." method="_on_start_game_button_pressed"]
+[connection signal="pressed" from="HostButton" to="." method="_on_host_button_pressed"]
+[connection signal="pressed" from="JoinGame" to="." method="_on_join_game_pressed"]
