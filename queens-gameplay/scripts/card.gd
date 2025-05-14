@@ -13,11 +13,6 @@ var hand_index = -1
 var is_dragging = false
 var drag_offset = Vector2()
 
-
-@rpc("any_peer")
-func rpc_flip_card():
-	flip_card(true)
-
 func _ready():
 	
 	var front_image_path = "res://assets/%s %s.png" % [suit, rank]
@@ -37,10 +32,10 @@ func _on_card_clicked():
 	if is_flipped and not main.in_flip_phase:
 		return
 	
-	if multiplayer.get_unique_id() != get_multiplayer_authority():
-		return
+	#if multiplayer.get_unique_id() != get_multiplayer_authority():
+		#return
 		
-	rpc("rpc_flip_card")
+	#rpc("rpc_flip_card")
 	
 	if main.jack_swap_mode:
 		if main.jack_swap_selection["from"] == null:
@@ -163,11 +158,6 @@ func flip_card(state := false):
 		
 func _gui_input(event):
 	var main = get_tree().get_root().get_node("Main")
-	
-	
-	if multiplayer.get_unique_id() != get_multiplayer_authority():
-		return
-	
 	
 	if main.in_flip_phase:
 		return 

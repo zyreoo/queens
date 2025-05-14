@@ -30,12 +30,17 @@ var reacting_players = []
 
 var allow_manual_flipping = true
 
-var peer: WebSocketMultiplayerPeer
+var queens_triggered := false
+var queens_player_index := -1
+var final_turns_remaining := 0
+var final_round_active := false
+var final_turn_count := 0
 
 func _ready():
 	print("the main scene is ready")
 	
 	$StartGameButton.visible = true
+	$queens.visible = true
 	
 	setup_players()
 	
@@ -61,25 +66,18 @@ func setup_players():
 		Vector2(screen_size.x/2, screen_size.y -200),
 		Vector2(100, screen_size.y/2)
 	]
-	
+	deck.clear()
 	for i in range (2):
 		for suit in suits:
 			for rank in ranks:
 				deck.append("%s:%s" % [suit, rank])
 		shuffled_deck = deck.duplicate()
 		shuffled_deck.shuffle()
-		
-		
-	var peer_ids = multiplayer.get_peers()
-	peer_ids.insert(0, multiplayer.get_unique_id())
 	
 	
-	for i in range (peer_ids.size()):
+	for i in range (4):
 		var player_scene = preload("res://scenes/Player.tscn")
 		var player_instance = player_scene.instantiate()
-		var peer_id = peer_ids[i]
-		player_instance.set_multiplayer_authority(peer_id)
-		
 		players.append(player_instance)
 		add_child(player_instance)
 		player_instance.position = positions[i]
@@ -239,7 +237,6 @@ func play_card_to_center(card):
 		next_turn()
 		
 func _on_start_game_button_pressed():
-	game_started = false
 	$StartGameButton.visible = false
 	
 	flip_phase_index = 0
@@ -324,15 +321,10 @@ func create_card_from_deck(player: Node = null):
 	var card_str = shuffled_deck.pop_back()
 	var card_parts = card_str.split(":")
 	var card = preload("res://scenes/Card.tscn").instantiate()
-	card.suit = card_parts[0]	
+	card.suit = card_parts[0]
 	card.rank = card_parts[1]
 	card.value = values[card_parts[1]]
-
-	if player:
-		card.set_multiplayer_authority(player.get_multiplayer_authority())
-		
 	return card
-
 
 func give_and_hide_card(player):
 	var card = create_card_from_deck()
@@ -410,34 +402,57 @@ func give_penalty_card(player):
 	var card = create_card_from_deck()
 	if card:
 		player.add_card(card, false)
+	
+func calculate_finbal_score():
+	var scores = []
+	var total_other_scores = 0
+	var lowest_score = INF
+	var winners = []
+	
+	for i in range(players.size()):
+		var player = players[i]
+		var hand_score = 0
+		for card in player.hand:
+			
+			match card.rank:
+				"12" : hand_score += 0
+				"1" : hand_score +=1 
+				"11", "13" : hand_score += 10
+				_ : hand_score += int(card.rank)
+				
+		player.score = hand_score
+		scores.append(hand_score)
+		
+		if i != queens_player_index:
+			total_other_scores += hand_score
+		
+		if hand_score < lowest_score:
+			lowest_score = hand_score
+			
+	for i in range (players.size()):
+		await get_tree().create_timer(1.0).timeout
+		
+	if scores[queens_player_index] == lowest_score:
+		show_message("Player %d wins" % queens_player_index)
+	else:
+		show_message("player %d loses" % queens_player_index)
+		players[queens_player_index].score = total_other_scores
+		for i in range (players.size()):
+			if i != queens_player_index:
+				players[i].score = 0
+				
+	show_message("game over")
+		
+		
 				
 
-
-func _on_host_button_pressed():
-	var peer = WebSocketMultiplayerPeer.new()
+func _on_queens_pressed():
+	if queens_triggered:
+		return 
 	
-	var result = peer.create_server(12345)
-	
-	if result != OK:
-		print("Failed to start the server")
-		return
-		
-	multiplayer.multiplayer_peer = peer
-	show_message(" hosting on port 12345")
-	print("hosting on port 12345")
-	
-	
-
-
-func _on_join_game_pressed():
-	var ip = $IPAddressInput.text
-	var peer = WebSocketMultiplayerPeer.new()
-	var result = peer.create_client("ws://" + ip + ":12345")
-	
-	if result != OK:
-		print("failed to connect")
-		return
-		
-	multiplayer.multiplayer_peer = peer
-	print("Connected to server")
-	
+	queens_triggered = true
+	queens_player_index = current_player_index
+	final_round_active = true
+	final_turn_count = 0
+	show_message("queens called")
+	$queens.visible = false

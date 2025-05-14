@@ -1,20 +1,16 @@
 extends Node2D
 
 
-@export var player_ide: int = -1
-
-
 var hand = []
 var score = 0
 
 
-func _ready():
-	if not multiplayer.is_local_peer(get_multiplayer_authority()):
-		visible = false
-
-
-
 func add_card(card_instance: Node, face_up := false):
+	
+	if card_instance == null:
+		return
+	
+	
 	
 	if card_instance.get_parent():
 		card_instance.get_parent().remove_child(card_instance)
@@ -45,8 +41,6 @@ func arrange_hand():
 		if not is_instance_valid(card):
 			continue
 		card.hand_index = i
-		
-	
 		match rot:
 			0:
 				card.rotation_degrees = 0

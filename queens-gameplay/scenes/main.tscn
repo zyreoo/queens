@@ -41,6 +41,14 @@ offset_right = 947.0
 offset_bottom = 248.0
 text = "join"
 
+[node name="queens" type="Button" parent="."]
+offset_left = 1145.0
+offset_top = 327.0
+offset_right = 1217.0
+offset_bottom = 358.0
+text = "QUEENS"
+
 [connection signal="pressed" from="StartGameButton" to="." method="_on_start_game_button_pressed"]
 [connection signal="pressed" from="HostButton" to="." method="_on_host_button_pressed"]
 [connection signal="pressed" from="JoinGame" to="." method="_on_join_game_pressed"]
+[connection signal="pressed" from="queens" to="." method="_on_queens_pressed"]
