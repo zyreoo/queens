@@ -37,6 +37,8 @@ var final_round_active := false
 var final_turn_count := 0
 var final_round_count :=0
 var queens_caller_index = null
+var turn_advanced_this_frame = false
+
 func _ready():
 	print("the main scene is ready")
 	
@@ -53,6 +55,8 @@ func initializate_center_card():
 	center_card.suit = start_card_parts[0]
 	center_card.rank = start_card_parts[1]
 	center_card.value = values[start_card_parts[1]]
+	
+	center_card.permanent_face_up = true
 	
 	add_child(center_card)
 	center_card.global_position = $CenterCardSlot.global_position
@@ -96,7 +100,7 @@ func deal_cards(player_instance):
 		player_instance.add_card(card, j <2 )
 
 func next_turn():
-	
+	turn_advanced_this_frame = false
 	current_player_index = (current_player_index + 1) % players.size()
 	
 	if final_round_active and current_player_index == queens_player_index:
@@ -161,7 +165,6 @@ func swap_card_with(clicked_card):
 func play_card_to_center(card):
 	var is_current_players_turn = card.holding_player == players[current_player_index]
 	var was_current_player = is_current_players_turn
-	
 	
 	if not reaction_mode and not is_current_players_turn:
 		show_message("not ur turn")
@@ -488,5 +491,3 @@ func _on_queens_pressed():
 	$queens.disabled = true
 	print("Current player index when Queens pressed: ", current_player_index)
 	print("Queens player index set to: ", queens_player_index)
-	
- 

@@ -4,6 +4,7 @@ extends TextureButton
 @export var suit: String
 @export var rank: String
 @export var value: int
+@export var permanent_face_up: bool= false
 
 var card_back_texture = preload("res://assets/Card Back 3.png")
 var front_texture : Texture = null
@@ -38,14 +39,20 @@ func _on_card_clicked():
 	
 	if main.jack_swap_mode:
 		if main.jack_swap_selection["from"] == null:
+			if holding_player != main.players[main.current_player_index]:
+				main.show_message("Fisrt card must be your own")
+				return
 			main.jack_swap_selection["from"] = self
 			self.modulate = Color(1, 1, 0.5)
 			main.show_message("selected the first card to swap")
 			return
+			
 		elif main.jack_swap_selection["to"] == null:
+			if holding_player == main.players[main.current_player_index]:
+				main.show_message("Second card must be from another player.")
+				return
 			if self == main.jack_swap_selection["from"]:
 				return
-			
 			main.jack_swap_selection["to"] = self
 			self.modulate = Color(1, 1, 0.5)
 			main.show_message("swapping cards..")
@@ -115,6 +122,11 @@ func _on_card_clicked():
 		return
 func flip_card(state := false):
 	var main = get_tree().get_root().get_node("Main")
+		
+	if permanent_face_up:
+		is_flipped = true
+		self.texture_normal = front_texture
+		return
 	
 	if state != null:
 		is_flipped = state
@@ -122,38 +134,29 @@ func flip_card(state := false):
 		is_flipped = !is_flipped
 		
 	self.texture_normal = front_texture if is_flipped else card_back_texture
-
-	
-
 	
 	if not main.allow_manual_flipping and not main.in_flip_phase:
 		return
-		
-
+	
 	if main.in_flip_phase:
 		if holding_player != main.players[main.flip_phase_index]:
-			print("Not ur turn to flip")
+			print("Not ur flip turn")
 			return
 			
 		if is_flipped:
 			print("Already flipped")
 			return
-			
-		if main.flip_count >= 2:
+		
+		if main.flip_count >=2:
 			return
-			
-	is_flipped = true
-	self.texture_normal = front_texture
-	main.flip_count +=1
 	
-	if main.allow_manual_flipping and is_flipped:
+	if main.allow_manual_flipping and is_flipped and not permanent_face_up:
 		await get_tree().create_timer(3.0).timeout
 		is_flipped = false
 		self.texture_normal = card_back_texture
-
+	
 	if main.in_flip_phase and is_flipped:
 		main.increment_flip_count()
-		
 		
 func _gui_input(event):
 	var main = get_tree().get_root().get_node("Main")
