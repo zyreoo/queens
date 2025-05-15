@@ -35,7 +35,8 @@ var queens_player_index := -1
 var final_turns_remaining := 0
 var final_round_active := false
 var final_turn_count := 0
-
+var final_round_count :=0
+var queens_caller_index = null
 func _ready():
 	print("the main scene is ready")
 	
@@ -95,9 +96,23 @@ func deal_cards(player_instance):
 		player_instance.add_card(card, j <2 )
 
 func next_turn():
+	
 	current_player_index = (current_player_index + 1) % players.size()
+	
+	if final_round_active and current_player_index == queens_player_index:
+		calculate_finbal_score()
+		return
+	if final_round_active:
+		final_round_count +=1
+		
+		if final_turn_count>= players.size():
+			await get_tree().create_timer(2.0).timeout
+			calculate_finbal_score()
+			return
 	print("Now it's Player %d's turn" % current_player_index)
 	await give_and_hide_card(players[current_player_index])
+	
+	
 	
 
 
@@ -145,12 +160,28 @@ func swap_card_with(clicked_card):
 	
 func play_card_to_center(card):
 	var is_current_players_turn = card.holding_player == players[current_player_index]
+	var was_current_player = is_current_players_turn
+	
 	
 	if not reaction_mode and not is_current_players_turn:
 		show_message("not ur turn")
 		return
+	
+	if reaction_mode and card.value != reaction_value:
+		show_message("invalid card")
 		
-	var was_current_player = is_current_players_turn
+		var p = card.holding_player
+		if p != null:
+			if card.get_parent():
+				card.get_parent().remove_child(card)
+			
+			p.add_child(card)
+			if not p.hand.has(card):
+				p.hand.append(card)
+			p.arrange_hand()
+			await get_tree().create_timer(0.5).timeout
+			give_penalty_card(p)
+		return
 
 	if  center_card and center_card.is_inside_tree():
 		center_card.get_parent().remove_child(center_card)
@@ -165,19 +196,16 @@ func play_card_to_center(card):
 			card.holding_player.hand.remove_at(index)
 			card.holding_player.arrange_hand()
 			
+			
 	if card.get_parent():
 		card.get_parent().remove_child(card)
 	add_child(card)
 	
 	card.rotation_degrees = 0
-	card.scale = Vector2.ONE
 	card.global_position = $CenterCardSlot.global_position
 	card.set_process(false)
 	card.set_mouse_filter(Control.MOUSE_FILTER_IGNORE)
-	
-	
-	if not card.is_flipped:
-		card.flip_card(true)
+	card.flip_card(true)
 	
 	if card.rank == "13":
 		show_message("You played a King! Choose one of your cards to reveal.")
@@ -331,17 +359,15 @@ func give_and_hide_card(player):
 	if card == null:
 		print("deck is empty")
 		return
-		
+	
 	add_child(card)
-	card.global_position = Vector2(600, 400)
+	card.global_position = Vector2(600,400)
 	card.flip_card(true)
 	
 	await get_tree().create_timer(1.5).timeout
 	
 	card.flip_card(false)
-	
 	player.add_card(card, false)
-	
 		
 func show_message(text):
 	$MessageLabel.text = text
@@ -358,6 +384,9 @@ func hide_all_flipped_cards():
 		for card in player.hand:
 			if is_instance_valid(card) and card.is_flipped:
 				card.flip_card()
+				
+	if is_instance_valid(center_card):
+		center_card.flip_card(true)
 				
 func execute_jack_swap():
 	jack_swap_mode = false
@@ -404,55 +433,60 @@ func give_penalty_card(player):
 		player.add_card(card, false)
 	
 func calculate_finbal_score():
-	var scores = []
+	game_started = false
+	var scores: Array = []
 	var total_other_scores = 0
 	var lowest_score = INF
-	var winners = []
+	var queens_score = 0
+	
 	
 	for i in range(players.size()):
 		var player = players[i]
 		var hand_score = 0
+		
 		for card in player.hand:
-			
+			if not is_instance_valid(card):
+				continue 
+		
 			match card.rank:
 				"12" : hand_score += 0
 				"1" : hand_score +=1 
 				"11", "13" : hand_score += 10
-				_ : hand_score += int(card.rank)
+				_ : 
+					hand_score += int(card.rank)
 				
 		player.score = hand_score
 		scores.append(hand_score)
 		
-		if i != queens_player_index:
+		if i == queens_player_index:
+			queens_score = hand_score
+		else:
 			total_other_scores += hand_score
-		
+			
 		if hand_score < lowest_score:
 			lowest_score = hand_score
-			
-	for i in range (players.size()):
-		await get_tree().create_timer(1.0).timeout
-		
-	if scores[queens_player_index] == lowest_score:
-		show_message("Player %d wins" % queens_player_index)
+	
+	await get_tree().create_timer(1.0).timeout
+	
+	if queens_score == lowest_score:
+		show_message("player %d wins" % (queens_player_index +1))
+	
 	else:
-		show_message("player %d loses" % queens_player_index)
+		show_message("Player %d called Queens but ddnt  have the lowest score.\nThey get all other players points: %d" % [queens_player_index + 1, total_other_scores])
 		players[queens_player_index].score = total_other_scores
 		for i in range (players.size()):
 			if i != queens_player_index:
 				players[i].score = 0
-				
-	show_message("game over")
-		
-		
-				
+	
+	await get_tree().create_timer(2.0).timeout
+	show_message("Game over")
 
 func _on_queens_pressed():
-	if queens_triggered:
-		return 
-	
-	queens_triggered = true
-	queens_player_index = current_player_index
 	final_round_active = true
-	final_turn_count = 0
-	show_message("queens called")
-	$queens.visible = false
+	queens_player_index = current_player_index
+	
+	$queens.disabled = true
+	print("Current player index when Queens pressed: ", current_player_index)
+	print("Queens player index set to: ", queens_player_index)
+	
+ 

@@ -34,7 +34,6 @@ func _on_card_clicked():
 	
 	#if multiplayer.get_unique_id() != get_multiplayer_authority():
 		#return
-		
 	#rpc("rpc_flip_card")
 	
 	if main.jack_swap_mode:
