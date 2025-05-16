@@ -1,5 +1,7 @@
 extends Node2D
 
+@onready var ip_field = $IPField
+
 var players = []
 var shuffled_deck = []
 var deck = []
@@ -38,6 +40,8 @@ var final_turn_count := 0
 var final_round_count :=0
 var queens_caller_index = null
 var turn_advanced_this_frame = false
+
+var peer: WebSocketMultiplayerPeer
 
 func _ready():
 	print("the main scene is ready")
@@ -491,3 +495,30 @@ func _on_queens_pressed():
 	$queens.disabled = true
 	print("Current player index when Queens pressed: ", current_player_index)
 	print("Queens player index set to: ", queens_player_index)
+
+
+func _on_host_button_pressed():
+	peer = WebSocketMultiplayerPeer.new()
+	var error = peer.create_server(12345, "0.0.0.0")
+	
+	if error != OK:
+		print("Failed to start server:", error)
+		return
+	multiplayer.multiplayer_peer = peer
+	print("Hosting Websocket server on port 12345")
+
+func _on_join_game_pressed():
+	var ip = ip_field.text.strip_edges()
+	if ip == "":
+		ip = "127.0.0.1"
+		
+	print("🧪 Attempting to connect to: ws://" + ip + ":12345")
+		
+	peer = WebSocketMultiplayerPeer.new()
+	var error = peer.create_client("ws://"+ip+":12345", null)
+	
+	if error != OK:
+		print("Failed to connect:", error)
+		return
+	multiplayer.multiplayer_peer = peer
+	print("Connecting to the server", ip)

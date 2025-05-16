@@ -1,6 +1,6 @@
 [gd_scene load_steps=2 format=3 uid="uid://dcjg1cr2fpdtu"]
 
-[ext_resource type="Script" path="res://scripts/card.gd" id="1_ppukc"]
+[ext_resource type="Script" uid="uid://dhh3l5cn32xai" path="res://scripts/card.gd" id="1_ppukc"]
 
 [node name="Card" type="TextureButton"]
 scale = Vector2(2, 2)

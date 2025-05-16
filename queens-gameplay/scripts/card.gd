@@ -6,7 +6,7 @@ extends TextureButton
 @export var value: int
 @export var permanent_face_up: bool= false
 
-var card_back_texture = preload("res://assets/Card Back 3.png")
+var card_back_texture = preload("res://assets/Card Back 3.png"	)
 var front_texture : Texture = null
 var is_flipped = false
 var holding_player : Node = null
