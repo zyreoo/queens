@@ -49,7 +49,13 @@ func _ready():
 	$StartGameButton.visible = true
 	$queens.visible = true
 	
+	
+	
 	setup_players()
+	multiplayer.peer_connected.connect(func(id): print("✅ Client connected:", id))
+	multiplayer.connected_to_server.connect(func(): print("✅ Connected to server"))
+	multiplayer.connection_failed.connect(func(): print("❌ Connection failed"))
+	multiplayer.server_disconnected.connect(func(): print("❌ Server disconnected"))
 	
 	
 func initializate_center_card():
