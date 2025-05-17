@@ -3,7 +3,12 @@ extends Node2D
 
 var hand = []
 var score = 0
+var player_id :=-1
+var peer_id := -1
 
+
+func _ready():
+	add_to_group("players")
 
 func add_card(card_instance: Node, face_up := false):
 	
@@ -23,8 +28,7 @@ func add_card(card_instance: Node, face_up := false):
 	card_instance.holding_player = self
 	card_instance.hand_index = hand.size() - 1
 		
-	if face_up:
-		card_instance.flip_card()
+	var is_local_player = (peer_id == multiplayer.get_unique_id())
 		
 	arrange_hand()
 	

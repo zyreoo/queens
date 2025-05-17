@@ -43,20 +43,115 @@ var turn_advanced_this_frame = false
 
 var peer: WebSocketMultiplayerPeer
 
+var local_peer_id := -1
+
 func _ready():
 	print("the main scene is ready")
 	
 	$StartGameButton.visible = true
 	$queens.visible = true
 	
-	
+	local_peer_id = multiplayer.get_unique_id()
 	
 	setup_players()
-	multiplayer.peer_connected.connect(func(id): print("✅ Client connected:", id))
-	multiplayer.connected_to_server.connect(func(): print("✅ Connected to server"))
-	multiplayer.connection_failed.connect(func(): print("❌ Connection failed"))
-	multiplayer.server_disconnected.connect(func(): print("❌ Server disconnected"))
+	multiplayer.peer_connected.connect(func(id): print("connected:", id))
+	multiplayer.connected_to_server.connect(func(): print("connected to server"))
+	multiplayer.connection_failed.connect(func(): print("Connection failed"))
+	multiplayer.server_disconnected.connect(func(): print("Server disconnected"))
 	
+	
+func _on_host_button_pressed():
+	peer = WebSocketMultiplayerPeer.new()
+	var error = peer.create_server(12345, "0.0.0.0")
+	if error != OK:
+		print("Failed to start server", error)
+		return
+	multiplayer.multiplayer_peer = peer
+	print("Hosting on port 12345")
+	
+func _on_join_game_pressed():
+	var ip = ip_field.text.strip_edges()
+	if ip == "": ip = "127.0.0.1"
+	peer = WebSocketMultiplayerPeer.new()
+	var error = peer.create_client("ws://" + ip+ ":12345")
+	if error != OK:
+		print("connection failed:", error)
+		return
+	multiplayer.multiplayer_peer = peer
+	print("Connecting to", ip)
+	
+func _on_start_game_button_pressed():
+	if game_started:
+		print("game already started")
+		return
+	
+	if multiplayer.is_server():
+		await _wait_for_peers_ready()
+		_start_game_server()
+		
+func _wait_for_peers_ready():
+	var expected = multiplayer.get_peers().size() +1
+	var timeout = 0.5
+	var start_time = Time.get_ticks_msec()
+	
+	while get_tree().get_nodes_in_group("players").size() < expected:
+		await get_tree().process_frame
+		
+		if Time.get_ticks_msec() - start_time > timeout *1000:
+			print("Not all players ready")
+			break
+@rpc("authority")
+func _start_game_server():
+	if game_started:
+		print("already started")
+		return
+		
+	game_started = true
+	
+	_create_players()
+	_shuffle_deck()
+
+	for i in range(players.size()):
+		var cards = []
+		for j in range(4):
+			var card_str = deck.pop_back()
+			cards.append(card_str)
+		rpc_id(players[i].peer_id, "_receive_initial_hand", cards)
+
+	var center_card_str = deck.pop_back()
+	rpc("_set_center_card", center_card_str)
+	current_player_index = 0
+	rpc("_set_turn", current_player_index)
+
+func _create_players():
+	players.clear()
+	var screen_size = get_viewport_rect().size
+	var positions = [
+		Vector2(screen_size.x / 2, 100),
+		Vector2(screen_size.x - 100, screen_size.y / 2),
+		Vector2(screen_size.x / 2, screen_size.y - 200),
+		Vector2(100, screen_size.y / 2)
+	]
+	var peer_ids = multiplayer.get_peers()
+	peer_ids.append(multiplayer.get_unique_id())
+
+
+	var i = 0
+	for peer_id in multiplayer.get_peers():
+		var player_scene = preload("res://scenes/Player.tscn")
+		var p = player_scene.instantiate()
+		add_child(p)
+		p.position = positions[i]
+		p.rotation_degrees = [0, 90, 180, -90][i]
+		p.peer_id = peer_id
+		players.append(p)
+		
+func _shuffle_deck():
+	deck.clear()
+	for suit in suits:
+		for rank in ranks:
+			deck.append("%s:%s" % [suit, rank])
+	deck.shuffle()
 	
 func initializate_center_card():
 	var start_card_str = shuffled_deck.pop_back()
@@ -102,11 +197,14 @@ func setup_players():
 			1: player_instance.rotation_degrees = 90
 			2:player_instance.rotation_degrees = 180
 			3:player_instance.rotation_degrees = -90
+		player_instance.set_multiplayer_authority(multiplayer.get_unique_id())
+		player_instance.player_id = i
+		player_instance.peer_id = multiplayer.get_unique_id()
 	
 
 func deal_cards(player_instance):
 	for j in range(4):
-		var card = create_card_from_deck()
+		var card = create_card_from_deck(player_instance)
 		player_instance.add_card(card, j <2 )
 
 func next_turn():
@@ -136,7 +234,8 @@ func draw_card_for_current_player():
 		used_deck = []
 		deck.shuffle()
 
-	drawn_card = create_card_from_deck()
+	var current_player = players[current_player_index]
+	drawn_card = create_card_from_deck(current_player)
 	drawn_card.flip_card()
 	add_child(drawn_card)
 
@@ -171,7 +270,7 @@ func swap_card_with(clicked_card):
 	swap_mode = false
 	next_turn()
 	
-	
+@rpc("authority")
 func play_card_to_center(card):
 	var is_current_players_turn = card.holding_player == players[current_player_index]
 	var was_current_player = is_current_players_turn
@@ -276,21 +375,11 @@ func play_card_to_center(card):
 		
 	if was_current_player:
 		next_turn()
-		
-func _on_start_game_button_pressed():
-	$StartGameButton.visible = false
 	
-	flip_phase_index = 0
-	in_flip_phase = true
-	flip_count = 0
-	
-	for player in players:
-		for j in range(4):
-			var card = create_card_from_deck()
-			player.add_card(card,false)
-	game_started = true
-	current_player_index = 0
-
+@rpc("any_peer")
+func start_turn(index):
+	current_player_index = index
+	show_message("Player %d turn " % (index+1))
 		
 func handle_initial_flip():
 	for i in range(players.size()):
@@ -365,10 +454,17 @@ func create_card_from_deck(player: Node = null):
 	card.suit = card_parts[0]
 	card.rank = card_parts[1]
 	card.value = values[card_parts[1]]
+	if player:
+		card.set_multiplayer_authority(player.peer_id)
+	else:
+		card.set_multiplayer_authority(1)
+		
 	return card
 
+
+@rpc("authority")
 func give_and_hide_card(player):
-	var card = create_card_from_deck()
+	var card = create_card_from_deck(player)
 	if card == null:
 		print("deck is empty")
 		return
@@ -441,7 +537,7 @@ func execute_jack_swap():
 	next_turn()
 	
 func give_penalty_card(player):
-	var card = create_card_from_deck()
+	var card = create_card_from_deck(player)
 	if card:
 		player.add_card(card, false)
 	
@@ -502,29 +598,56 @@ func _on_queens_pressed():
 	print("Current player index when Queens pressed: ", current_player_index)
 	print("Queens player index set to: ", queens_player_index)
 
-
-func _on_host_button_pressed():
-	peer = WebSocketMultiplayerPeer.new()
-	var error = peer.create_server(12345, "0.0.0.0")
+@rpc("any_peer", "reliable")
+func _receive_initial_hand(cards: Array):
+	var local_player = _find_local_player()
 	
-	if error != OK:
-		print("Failed to start server:", error)
-		return
-	multiplayer.multiplayer_peer = peer
-	print("Hosting Websocket server on port 12345")
+	if local_player == null:
+		await get_tree().create_timer(0.5).timeout
+		local_player = _find_local_player()
+		if local_player == null:
+			print("Couldnt find local player!")
+			return
+			
+	for i in range(cards.size()):
+		var card_str = cards[i]
+		var parts = card_str.split(":")
+		if parts.size() != 2:
+			print("Invalid card format:", card_str)
+			continue
+		
+		var card = preload("res://scenes/Card.tscn").instantiate()
+		card.suit = parts[0]
+		card.rank = parts[1]
+		card.value = values[parts[1]]
+		
+		var is_local = local_player.peer_id == multiplayer.get_unique_id()
+		var should_flip = i < 2 and is_local
+		
+		local_player.add_card(card, should_flip)
+		
 
-func _on_join_game_pressed():
-	var ip = ip_field.text.strip_edges()
-	if ip == "":
-		ip = "127.0.0.1"
-		
-	print("🧪 Attempting to connect to: ws://" + ip + ":12345")
-		
-	peer = WebSocketMultiplayerPeer.new()
-	var error = peer.create_client("ws://"+ip+":12345", null)
-	
-	if error != OK:
-		print("Failed to connect:", error)
-		return
-	multiplayer.multiplayer_peer = peer
-	print("Connecting to the server", ip)
+@rpc("any_peer", "reliable")
+func _set_center_card(card_str: String):
+	if center_card:
+		center_card.queue_free()
+
+	var parts = card_str.split(":")
+	center_card = preload("res://scenes/Card.tscn").instantiate()
+	center_card.suit = parts[0]
+	center_card.rank = parts[1]
+	center_card.value = values[parts[1]]
+	center_card.permanent_face_up = true
+	add_child(center_card)
+	center_card.global_position = $CenterCardSlot.global_position
+	center_card.flip_card(true)
+
+@rpc("any_peer", "reliable")
+func _set_turn(index: int):
+	current_player_index = index
+
+func _find_local_player():
+	for p in get_tree().get_nodes_in_group("players"):
+		if p.peer_id == multiplayer.get_unique_id():
+			return p
+	return null

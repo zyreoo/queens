@@ -92,7 +92,7 @@ func _on_card_clicked():
 		main.reacting_players.append(holding_player)
 		
 		if value == main.reaction_value:
-			main.play_card_to_center(self)
+			main.rpc_id(1, "play_card_to_center",self)
 			
 		else:
 			var player = holding_player
@@ -181,7 +181,7 @@ func _gui_input(event):
 			var center_pos = center.global_position
 			
 			if global_position.distance_to(center_pos) < 350:
-				main.play_card_to_center(self)
+				main.rpc_id(1, "play_card_to_center",self)
 			else:
 				if holding_player and holding_player.has_method("arrange_hand"):
 					holding_player.arrange_hand()
