@@ -15,22 +15,28 @@ func add_card(card_instance: Node, face_up := false):
 	if card_instance == null:
 		return
 	
-	
-	
 	if card_instance.get_parent():
 		card_instance.get_parent().remove_child(card_instance)
-		
 		
 	add_child(card_instance)
 	hand.append(card_instance)
 	
-	
 	card_instance.holding_player = self
 	card_instance.hand_index = hand.size() - 1
-		
-	var is_local_player = (peer_id == multiplayer.get_unique_id())
-		
+	
 	arrange_hand()
+		
+	var is_local_player = is_local()
+	
+	if not is_local():
+		card_instance.set_mouse_filter(Control.MOUSE_FILTER_IGNORE)
+		card_instance.flip_card(false)
+	else:
+		if face_up:
+			card_instance.flip_card(true)
+		else:
+			card_instance.flip_card(false)
+		
 	
 			
 func arrange_hand():
@@ -66,6 +72,9 @@ func calculate_score(_values_dict):
 		score += card.value
 	return score
 	
-	
+func is_local():
+	return peer_id == multiplayer.get_unique_id()
+
+
 func update_score_label():
 	$Label.text = "Score: %d " % score

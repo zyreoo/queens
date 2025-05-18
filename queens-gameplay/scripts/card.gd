@@ -6,13 +6,14 @@ extends TextureButton
 @export var value: int
 @export var permanent_face_up: bool= false
 
-var card_back_texture = preload("res://assets/Card Back 3.png"	)
+var card_back_texture = preload("res://assets/Card Back 3.png")
 var front_texture : Texture = null
 var is_flipped = false
 var holding_player : Node = null
 var hand_index = -1
 var is_dragging = false
 var drag_offset = Vector2()
+
 
 func _ready():
 	
@@ -33,9 +34,6 @@ func _on_card_clicked():
 	if is_flipped and not main.in_flip_phase:
 		return
 	
-	#if multiplayer.get_unique_id() != get_multiplayer_authority():
-		#return
-	#rpc("rpc_flip_card")
 	
 	if main.jack_swap_mode:
 		if main.jack_swap_selection["from"] == null:
@@ -92,8 +90,12 @@ func _on_card_clicked():
 		main.reacting_players.append(holding_player)
 		
 		if value == main.reaction_value:
-			main.rpc_id(1, "play_card_to_center",self)
-			
+			var card_data = {
+					"suit": suit,
+					"rank": rank,
+					"value": value
+				}
+			main.rpc_id(1, "request_play_card", card_data)
 		else:
 			var player = holding_player
 			if player:
@@ -161,6 +163,9 @@ func flip_card(state := false):
 func _gui_input(event):
 	var main = get_tree().get_root().get_node("Main")
 	
+	if holding_player and holding_player.peer_id != multiplayer.get_unique_id():
+		return
+	
 	if main.in_flip_phase:
 		return 
 		
@@ -181,7 +186,12 @@ func _gui_input(event):
 			var center_pos = center.global_position
 			
 			if global_position.distance_to(center_pos) < 350:
-				main.rpc_id(1, "play_card_to_center",self)
+				var card_data = {
+					"suit": suit,
+					"rank": rank,
+					"value": value
+				}
+				main.rpc_id(1, "request_play_card", card_data)
 			else:
 				if holding_player and holding_player.has_method("arrange_hand"):
 					holding_player.arrange_hand()

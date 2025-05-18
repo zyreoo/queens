@@ -40,11 +40,94 @@ var final_turn_count := 0
 var final_round_count :=0
 var queens_caller_index = null
 var turn_advanced_this_frame = false
-
 var peer: WebSocketMultiplayerPeer
-
 var local_peer_id := -1
+var player_count := 0
+var registered_peers: Array = []
 
+func _update_center_card(card_data: Dictionary):
+	if center_card:
+		center_card.queue_free()
+		
+	center_card = preload("res://scenes/Card.tscn").instantiate()
+	center_card.suit = card_data.suit
+	center_card.rank = card_data.rank
+	center_card.value = card_data.value
+	center_card.permanent_face_up = true
+	
+	add_child(center_card)
+	
+	if has_node("CenterCardSlot"):
+		center_card.global_position = $CenterCardSlot.global_position
+	else:
+		print("center card slot not found")
+		
+		
+	center_card.rotation_degrees = 0
+	center_card.flip_card(true)
+
+
+func _receive_initial_hand(cards: Array):
+	var local_player = null 
+	var attempts = 10
+	
+	while local_player == null and attempts > 0: 
+		await get_tree().process_frame
+		local_player = _find_local_player()
+		attempts -= 1
+		
+	if local_player == null:
+		print("couldnot find local player after mulple attepmts")
+		return 
+	
+	print("Looking for local player with ID:", multiplayer.get_unique_id())
+	
+	for i in range(cards.size()):
+		var card_str = cards[i]
+		var parts = card_str.split(":")
+		if parts.size() != 2:
+			print("Invalid card format:", card_str)
+			continue
+		
+		var card = preload("res://scenes/Card.tscn").instantiate()
+		card.suit = parts[0]
+		card.rank = parts[1]
+		card.value = values[parts[1]]
+		
+		var is_local = local_player.peer_id == multiplayer.get_unique_id()
+		var should_flip = i < 2 and is_local
+		
+		local_player.add_card(card, should_flip)
+		
+func is_local():
+	var peer_id = multiplayer.get_unique_id()
+	
+	return peer_id
+		
+func _create_players():
+	players.clear()
+	var screen_size = get_viewport_rect().size
+	var positions = [
+		Vector2(screen_size.x / 2, 100),
+		Vector2(screen_size.x - 100, screen_size.y / 2),
+		Vector2(screen_size.x / 2, screen_size.y - 200),
+		Vector2(100, screen_size.y / 2)
+	]
+	var peer_ids = multiplayer.get_peers()
+	peer_ids.append(multiplayer.get_unique_id())
+	
+	for i in range (peer_ids.size()):
+		var player_scene = preload("res://scenes/Player.tscn")
+		var p = player_scene.instantiate()
+		p.position = positions[i]
+		p.rotation_degrees = [0, 90, 180, -90][i]
+		p.peer_id = peer_ids[i]
+		p.player_id = i
+		p.set_multiplayer_authority(peer_ids[i])
+		add_child(p)
+		players.append(p)
+		p.add_to_group("players")
+	
 func _ready():
 	print("the main scene is ready")
 	
@@ -53,9 +136,11 @@ func _ready():
 	
 	local_peer_id = multiplayer.get_unique_id()
 	
-	setup_players()
 	multiplayer.peer_connected.connect(func(id): print("connected:", id))
-	multiplayer.connected_to_server.connect(func(): print("connected to server"))
+	multiplayer.connected_to_server.connect(func(): 
+		print("connected to server")
+		_spawn_local_player()
+	)
 	multiplayer.connection_failed.connect(func(): print("Connection failed"))
 	multiplayer.server_disconnected.connect(func(): print("Server disconnected"))
 	
@@ -69,6 +154,9 @@ func _on_host_button_pressed():
 	multiplayer.multiplayer_peer = peer
 	print("Hosting on port 12345")
 	
+	await get_tree().create_timer(0.5).timeout
+	register_player()
+	
 func _on_join_game_pressed():
 	var ip = ip_field.text.strip_edges()
 	if ip == "": ip = "127.0.0.1"
@@ -79,6 +167,8 @@ func _on_join_game_pressed():
 		return
 	multiplayer.multiplayer_peer = peer
 	print("Connecting to", ip)
+	await get_tree().create_timer(0.5).timeout
+	rpc_id(1, "register_player")
 	
 func _on_start_game_button_pressed():
 	if game_started:
@@ -90,7 +180,7 @@ func _on_start_game_button_pressed():
 		_start_game_server()
 		
 func _wait_for_peers_ready():
-	var expected = multiplayer.get_peers().size() +1
+	var expected = player_count
 	var timeout = 0.5
 	var start_time = Time.get_ticks_msec()
 	
@@ -105,46 +195,39 @@ func _start_game_server():
 	if game_started:
 		print("already started")
 		return
-		
-	game_started = true
 	
+	current_player_index = 0
+	game_started = true
 	_create_players()
 	_shuffle_deck()
+	await get_tree().create_timer(0.5).timeout
+	register_player()
+	rpc("_set_turn", current_player_index)
 
 	for i in range(players.size()):
+		var peer_id = players[i].peer_id
 		var cards = []
 		for j in range(4):
 			var card_str = deck.pop_back()
 			cards.append(card_str)
-		rpc_id(players[i].peer_id, "_receive_initial_hand", cards)
-
+		if peer_id == multiplayer.get_unique_id():
+			_receive_initial_hand(cards)
+		else:
+			rpc_id(peer_id, "_receive_initial_hand", cards)
+			
+			
 	var center_card_str = deck.pop_back()
-	rpc("_set_center_card", center_card_str)
+	var parts = center_card_str.split(":")
+	var card_data = {
+		 "suit": parts[0],
+		"rank": parts[1],
+		"value": values[parts[1]],
+		"position": $CenterCardSlot.global_position
+}
+	rpc("_update_center_card", card_data)
+	rpc_id(1, "_set_center_card", center_card_str)
 	current_player_index = 0
 	rpc("_set_turn", current_player_index)
-
-func _create_players():
-	players.clear()
-	var screen_size = get_viewport_rect().size
-	var positions = [
-		Vector2(screen_size.x / 2, 100),
-		Vector2(screen_size.x - 100, screen_size.y / 2),
-		Vector2(screen_size.x / 2, screen_size.y - 200),
-		Vector2(100, screen_size.y / 2)
-	]
-	var peer_ids = multiplayer.get_peers()
-	peer_ids.append(multiplayer.get_unique_id())
-
-
-	var i = 0
-	for peer_id in multiplayer.get_peers():
-		var player_scene = preload("res://scenes/Player.tscn")
-		var p = player_scene.instantiate()
-		add_child(p)
-		p.position = positions[i]
-		p.rotation_degrees = [0, 90, 180, -90][i]
-		p.peer_id = peer_id
-		players.append(p)
 		
 func _shuffle_deck():
 	deck.clear()
@@ -166,41 +249,6 @@ func initializate_center_card():
 	add_child(center_card)
 	center_card.global_position = $CenterCardSlot.global_position
 	center_card.flip_card(true)
-	
-	
-func setup_players():
-	var screen_size = get_viewport_rect().size
-	var positions = [
-		Vector2(screen_size.x /2, 100),
-		Vector2(screen_size.x - 100, screen_size.y /2),
-		Vector2(screen_size.x/2, screen_size.y -200),
-		Vector2(100, screen_size.y/2)
-	]
-	deck.clear()
-	for i in range (2):
-		for suit in suits:
-			for rank in ranks:
-				deck.append("%s:%s" % [suit, rank])
-		shuffled_deck = deck.duplicate()
-		shuffled_deck.shuffle()
-	
-	
-	for i in range (4):
-		var player_scene = preload("res://scenes/Player.tscn")
-		var player_instance = player_scene.instantiate()
-		players.append(player_instance)
-		add_child(player_instance)
-		player_instance.position = positions[i]
-		
-		match i:
-			0: player_instance.rotation_degrees = 0
-			1: player_instance.rotation_degrees = 90
-			2:player_instance.rotation_degrees = 180
-			3:player_instance.rotation_degrees = -90
-		player_instance.set_multiplayer_authority(multiplayer.get_unique_id())
-		player_instance.player_id = i
-		player_instance.peer_id = multiplayer.get_unique_id()
-	
 
 func deal_cards(player_instance):
 	for j in range(4):
@@ -223,11 +271,9 @@ func next_turn():
 			return
 	print("Now it's Player %d's turn" % current_player_index)
 	await give_and_hide_card(players[current_player_index])
+	var current_peer_id = players[current_player_index].peer_id
+	rpc_id(current_peer_id, "start_turn", current_player_index)
 	
-	
-	
-
-
 func draw_card_for_current_player():
 	if deck.size() == 0:
 		deck = used_deck
@@ -375,6 +421,14 @@ func play_card_to_center(card):
 		
 	if was_current_player:
 		next_turn()
+		
+	var card_data = {
+	"suit": card.suit,
+	"rank": card.rank,
+	"value": card.value
+}
+	
+	rpc("_update_center_card", card_data)
 	
 @rpc("any_peer")
 func start_turn(index):
@@ -597,37 +651,7 @@ func _on_queens_pressed():
 	$queens.disabled = true
 	print("Current player index when Queens pressed: ", current_player_index)
 	print("Queens player index set to: ", queens_player_index)
-
-@rpc("any_peer", "reliable")
-func _receive_initial_hand(cards: Array):
-	var local_player = _find_local_player()
-	
-	if local_player == null:
-		await get_tree().create_timer(0.5).timeout
-		local_player = _find_local_player()
-		if local_player == null:
-			print("Couldnt find local player!")
-			return
-			
-	for i in range(cards.size()):
-		var card_str = cards[i]
-		var parts = card_str.split(":")
-		if parts.size() != 2:
-			print("Invalid card format:", card_str)
-			continue
-		
-		var card = preload("res://scenes/Card.tscn").instantiate()
-		card.suit = parts[0]
-		card.rank = parts[1]
-		card.value = values[parts[1]]
-		
-		var is_local = local_player.peer_id == multiplayer.get_unique_id()
-		var should_flip = i < 2 and is_local
-		
-		local_player.add_card(card, should_flip)
-		
-
-@rpc("any_peer", "reliable")
+@rpc("authority")
 func _set_center_card(card_str: String):
 	if center_card:
 		center_card.queue_free()
@@ -648,6 +672,66 @@ func _set_turn(index: int):
 
 func _find_local_player():
 	for p in get_tree().get_nodes_in_group("players"):
+		print("found player with peer_id", p.peer_id)
 		if p.peer_id == multiplayer.get_unique_id():
 			return p
 	return null
+
+
+@rpc("any_peer")
+func request_play_card(card_data: Dictionary):
+	if not multiplayer.is_server():	
+		return
+	
+	var card = preload("res://scenes/Card.tscn").instantiate()
+	card.suit = card_data.suit
+	card.rank = card_data.rank
+	card.value = card_data.value
+	card.set_multiplayer_authority(1)
+	add_child(card)
+	
+	play_card_to_center(card)
+	
+@rpc("any_peer")
+func register_player():
+	var peer_id = multiplayer.get_remote_sender_id()
+	print("Player with ID", peer_id)
+	
+	if registered_peers.has(peer_id):
+		return
+	
+	
+	if registered_peers.size() >=4:
+		print("Too many players")
+		return 
+	
+	registered_peers.append(peer_id)
+	rpc_id(peer_id, "_assign_player_index", registered_peers.size() - 1)
+
+func _spawn_local_player():
+	var player_scene = preload("res://scenes/Player.tscn")
+	var player = player_scene.instantiate()
+	
+	player.peer_id = multiplayer.get_unique_id()
+	player.player_id = -1
+	player.set_multiplayer_authority(multiplayer.get_unique_id())
+	add_child(player)
+	player.add_to_group("players")
+	
+	var screen_size = get_viewport_rect().size
+	player.position = Vector2(screen_size.x/2, screen_size.y-200)
+	player.rotation_degrees = 180
+	
+	players.append(player)
+	
+@rpc("authority")
+func _assign_player_index(index: int):
+	var local_player = _find_local_player()
+	
+	if local_player:
+		local_player.player_id = index
+		print("Local player assigned index: ", index)
+		if index == 0:
+			print(" i m the host")
+	else:
+		print("local player not found")
