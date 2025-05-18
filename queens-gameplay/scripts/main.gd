@@ -45,7 +45,11 @@ var local_peer_id := -1
 var player_count := 0
 var registered_peers: Array = []
 
+
+
+@rpc("any_peer", "reliable")
 func _update_center_card(card_data: Dictionary):
+	
 	if center_card:
 		center_card.queue_free()
 		
@@ -54,50 +58,121 @@ func _update_center_card(card_data: Dictionary):
 	center_card.rank = card_data.rank
 	center_card.value = card_data.value
 	center_card.permanent_face_up = true
-	
 	add_child(center_card)
-	
-	if has_node("CenterCardSlot"):
-		center_card.global_position = $CenterCardSlot.global_position
-	else:
-		print("center card slot not found")
-		
-		
+	center_card.global_position = $CenterCardSlot.global_position
 	center_card.rotation_degrees = 0
 	center_card.flip_card(true)
 
+@rpc("authority")
+func play_card_to_center(card):
+	var is_current_players_turn = card.holding_player == players[current_player_index]
+	var was_current_player = is_current_players_turn
+	
+	if not reaction_mode and not is_current_players_turn:
+		show_message("not ur turn")
+		return
+	
+	if reaction_mode and card.value != reaction_value:
+		show_message("invalid card")
+		
+		var p = card.holding_player
+		if p != null:
+			if card.get_parent():
+				card.get_parent().remove_child(card)
+			
+			p.add_child(card)
+			if not p.hand.has(card):
+				p.hand.append(card)
+			p.arrange_hand()
+			await get_tree().create_timer(0.5).timeout
+			give_penalty_card(p)
+		return
 
-func _receive_initial_hand(cards: Array):
-	var local_player = null 
-	var attempts = 10
-	
-	while local_player == null and attempts > 0: 
-		await get_tree().process_frame
-		local_player = _find_local_player()
-		attempts -= 1
+	if  center_card and center_card.is_inside_tree():
+		center_card.get_parent().remove_child(center_card)
+		used_deck.append("%s:%s" % [center_card.suit, center_card.rank])
+		center_card.queue_free()
 		
-	if local_player == null:
-		print("couldnot find local player after mulple attepmts")
+	center_card = card
+	
+	if card.holding_player:
+		var index = card.hand_index
+		if index >= 0 and index < card.holding_player.hand.size():
+			card.holding_player.hand.remove_at(index)
+			card.holding_player.arrange_hand()
+			
+			
+	if card.get_parent():
+		card.get_parent().remove_child(card)
+	add_child(card)
+	
+	card.rotation_degrees = 0
+	card.global_position = $CenterCardSlot.global_position
+	card.set_process(false)
+	card.set_mouse_filter(Control.MOUSE_FILTER_IGNORE)
+	card.flip_card(true)
+	
+	var card_data = {"suit": card.suit,"rank": card.rank,"value": card.value}
+	
+	
+	rpc("_update_center_card", card_data)
+	
+	if card.rank == "13":
+		show_message("You played a King! Choose one of your cards to reveal.")
+		allow_manual_flipping = true 
+		awaiting_king_reveal = true
+
+		await get_tree().create_timer(3.0).timeout 
+		allow_manual_flipping = false
+		awaiting_king_reveal = false
+		if was_current_player:
+			next_turn()
+		return
+		
+	elif card.rank == "11":
+		show_message("you played a jack! you can swap in within 4 seconds")
+		jack_swap_mode = true
+		jack_swap_selection["from"] = null
+		jack_swap_selection["to"] = null
+		jack_swap_timer = get_tree().create_timer(4.0)
+		await jack_swap_timer.timeout
+		if jack_swap_mode:
+			jack_swap_mode = false
+			show_message("timeout")
+			next_turn()
+		return
+		
+	if card.rank == "12":
+		show_message("you played a queen")
+		var next_player_index = (current_player_index + 1) % players.size()
+		var next_player = players[next_player_index]
+		
+		if card.get_parent():
+			card.get_parent().remove_child(card)
+		
+		next_player.add_card(card, false)
+		await get_tree().create_timer(0.8).timeout
+		next_turn()
 		return 
-	
-	print("Looking for local player with ID:", multiplayer.get_unique_id())
-	
-	for i in range(cards.size()):
-		var card_str = cards[i]
-		var parts = card_str.split(":")
-		if parts.size() != 2:
-			print("Invalid card format:", card_str)
-			continue
+			
+	if card.rank not in ["11", "12", "13"]:
+		reaction_value = card.value
+		reaction_mode = true
+		reacting_players.clear()
+		show_message("match")
 		
-		var card = preload("res://scenes/Card.tscn").instantiate()
-		card.suit = parts[0]
-		card.rank = parts[1]
-		card.value = values[parts[1]]
+		await get_tree().create_timer(3.0).timeout
+		reaction_mode = false
+		reaction_value = null
 		
-		var is_local = local_player.peer_id == multiplayer.get_unique_id()
-		var should_flip = i < 2 and is_local
+		show_message("reaction window closed.")
 		
-		local_player.add_card(card, should_flip)
+		if was_current_player:
+			next_turn()
+		return
+		
+	if was_current_player:
+		next_turn()
 		
 func is_local():
 	var peer_id = multiplayer.get_unique_id()
@@ -106,28 +181,35 @@ func is_local():
 		
 func _create_players():
 	players.clear()
-	var screen_size = get_viewport_rect().size
-	var positions = [
-		Vector2(screen_size.x / 2, 100),
-		Vector2(screen_size.x - 100, screen_size.y / 2),
-		Vector2(screen_size.x / 2, screen_size.y - 200),
-		Vector2(100, screen_size.y / 2)
-	]
+
 	var peer_ids = multiplayer.get_peers()
-	peer_ids.append(multiplayer.get_unique_id())
+	peer_ids.append(multiplayer.get_unique_id())  # Include self
+
+	var center_pos = $CenterCardSlot.global_position
+	var radius = 360
 	
-	for i in range (peer_ids.size()):
+	var total_players = peer_ids.size()
+
+	for i in range(total_players):
+		var pid = peer_ids[i]
+		var angle = 2 * PI * i / total_players
+		
+		var pos_x = center_pos.x + radius * cos(angle)
+		
+		var pos_y = center_pos.y + radius * sin(angle)
+
 		var player_scene = preload("res://scenes/Player.tscn")
 		var p = player_scene.instantiate()
-		p.position = positions[i]
-		p.rotation_degrees = [0, 90, 180, -90][i]
-		p.peer_id = peer_ids[i]
+		p.peer_id = pid
 		p.player_id = i
-		p.set_multiplayer_authority(peer_ids[i])
+		p.position = Vector2(pos_x, pos_y)
+		p.look_at(center_pos)
+		p.set_multiplayer_authority(pid)
+
 		add_child(p)
-		players.append(p)
 		p.add_to_group("players")
-	
+		players.append(p)
+		rpc("_spawn_player", pid, Vector2(pos_x, pos_y), i)
 func _ready():
 	print("the main scene is ready")
 	
@@ -137,10 +219,7 @@ func _ready():
 	local_peer_id = multiplayer.get_unique_id()
 	
 	multiplayer.peer_connected.connect(func(id): print("connected:", id))
-	multiplayer.connected_to_server.connect(func(): 
-		print("connected to server")
-		_spawn_local_player()
-	)
+	multiplayer.connected_to_server.connect(func():print("connected to server"))
 	multiplayer.connection_failed.connect(func(): print("Connection failed"))
 	multiplayer.server_disconnected.connect(func(): print("Server disconnected"))
 	
@@ -148,27 +227,39 @@ func _ready():
 func _on_host_button_pressed():
 	peer = WebSocketMultiplayerPeer.new()
 	var error = peer.create_server(12345, "0.0.0.0")
-	if error != OK:
-		print("Failed to start server", error)
+	if error == OK:
+		multiplayer.multiplayer_peer = peer
+		print("Hosting on port 12345")
+		await get_tree().create_timer(0.5).timeout
 		return
-	multiplayer.multiplayer_peer = peer
-	print("Hosting on port 12345")
 	
 	await get_tree().create_timer(0.5).timeout
 	register_player()
+
+@rpc("any_peer")
+func _spawn_player(peer_id: int, pos: Vector2, index: int):
+	var player_scene = preload("res://scenes/Player.tscn")
+	var p = player_scene.instantiate()
+	p.peer_id = peer_id
+	p.player_id = index
+	p.position = pos
+	p.look_at($CenterCardSlot.global_position)
+	p.set_multiplayer_authority(peer_id)
+	add_child(p)
+	p.add_to_group("players")
+	players.append(p)
 	
 func _on_join_game_pressed():
 	var ip = ip_field.text.strip_edges()
 	if ip == "": ip = "127.0.0.1"
 	peer = WebSocketMultiplayerPeer.new()
 	var error = peer.create_client("ws://" + ip+ ":12345")
-	if error != OK:
-		print("connection failed:", error)
+	if error == OK:
+		multiplayer.multiplayer_peer = peer
+		print("connecting to", ip)
+		await get_tree().create_timer(0.5).timeout
+		rpc_id(1, "register_player")
 		return
-	multiplayer.multiplayer_peer = peer
-	print("Connecting to", ip)
-	await get_tree().create_timer(0.5).timeout
-	rpc_id(1, "register_player")
 	
 func _on_start_game_button_pressed():
 	if game_started:
@@ -176,8 +267,11 @@ func _on_start_game_button_pressed():
 		return
 	
 	if multiplayer.is_server():
-		await _wait_for_peers_ready()
-		_start_game_server()
+		_create_players()
+		_shuffle_deck()
+		_deal_initial_hands()
+		initializate_center_card()
+		rpc("_set_turn", 0)
 		
 func _wait_for_peers_ready():
 	var expected = player_count
@@ -195,7 +289,17 @@ func _start_game_server():
 	if game_started:
 		print("already started")
 		return
-	
+	for i in range(players.size()):
+		var peer_id = players[i].peer_id
+		var cards = []
+		for j in range(4):
+			var card_str = deck.pop_back()
+			cards.append(card_str)
+		
+		for p_id in multiplayer.get_peers():
+			rpc_id(p_id, "_receive_player_hand", peer_id, cards)
+		
+		_receive_player_hand(peer_id, cards)
 	current_player_index = 0
 	game_started = true
 	_create_players()
@@ -210,10 +314,6 @@ func _start_game_server():
 		for j in range(4):
 			var card_str = deck.pop_back()
 			cards.append(card_str)
-		if peer_id == multiplayer.get_unique_id():
-			_receive_initial_hand(cards)
-		else:
-			rpc_id(peer_id, "_receive_initial_hand", cards)
 			
 			
 	var center_card_str = deck.pop_back()
@@ -221,12 +321,11 @@ func _start_game_server():
 	var card_data = {
 		 "suit": parts[0],
 		"rank": parts[1],
-		"value": values[parts[1]],
-		"position": $CenterCardSlot.global_position
+		"value": values[parts[1]]
 }
 	rpc("_update_center_card", card_data)
-	rpc_id(1, "_set_center_card", center_card_str)
 	current_player_index = 0
+	_update_center_card(card_data)
 	rpc("_set_turn", current_player_index)
 		
 func _shuffle_deck():
@@ -235,26 +334,59 @@ func _shuffle_deck():
 		for rank in ranks:
 			deck.append("%s:%s" % [suit, rank])
 	deck.shuffle()
+	shuffled_deck = deck.duplicate()
 	
 func initializate_center_card():
 	var start_card_str = shuffled_deck.pop_back()
-	var start_card_parts = start_card_str.split(":")
-	center_card = preload("res://scenes/Card.tscn").instantiate()
-	center_card.suit = start_card_parts[0]
-	center_card.rank = start_card_parts[1]
-	center_card.value = values[start_card_parts[1]]
+	var parts = start_card_str.split(":")
+	var card_data = {
+		 "suit": parts[0],
+		"rank": parts[1],
+		"value": values[parts[1]]
+}
+	rpc("_update_center_card", card_data)
+	_update_center_card(card_data)
+func _deal_initial_hands():
+	for player in players:
+		var hand = []
+		for i in range(4):
+			var card_str = shuffled_deck.pop_back()
+			hand.append(card_str)
+		
+		for peer_id in multiplayer.get_peers():
+			rpc_id(peer_id, "_receive_player_hand",player.peer_id, hand)
+		
+		_receive_player_hand(player.peer_id, hand)
+		
+@rpc("any_peer", "reliable")
+func _receive_player_hand(owner_peer_id: int, cards: Array):
+	await get_tree().process_frame
+	var player = null
 	
-	center_card.permanent_face_up = true
+	for p in get_tree().get_nodes_in_group("players"):
+		if p.peer_id == owner_peer_id:
+			player = p
+			break
 	
-	add_child(center_card)
-	center_card.global_position = $CenterCardSlot.global_position
-	center_card.flip_card(true)
-
-func deal_cards(player_instance):
-	for j in range(4):
-		var card = create_card_from_deck(player_instance)
-		player_instance.add_card(card, j <2 )
-
+	if player == null:
+		print("not find player with peer_id", owner_peer_id)
+		return
+	
+	for i in range(cards.size()):
+		var card_str = cards[i]
+		var card_parts = card_str.split(":")
+		var card = preload("res://scenes/Card.tscn").instantiate()
+		card.suit = card_parts[0]
+		card.rank = card_parts[1]
+		card.value = values[card_parts[1]]
+		
+		var is_local = multiplayer.get_unique_id() == owner_peer_id
+		var face_up = is_local and (i <2)
+		
+		player.add_card(card, face_up)
+		
+	if player.has_method("arrange_hand"):
+		player.arrange_hand()
 func next_turn():
 	turn_advanced_this_frame = false
 	current_player_index = (current_player_index + 1) % players.size()
@@ -315,120 +447,6 @@ func swap_card_with(clicked_card):
 	drawn_card = null
 	swap_mode = false
 	next_turn()
-	
-@rpc("authority")
-func play_card_to_center(card):
-	var is_current_players_turn = card.holding_player == players[current_player_index]
-	var was_current_player = is_current_players_turn
-	
-	if not reaction_mode and not is_current_players_turn:
-		show_message("not ur turn")
-		return
-	
-	if reaction_mode and card.value != reaction_value:
-		show_message("invalid card")
-		
-		var p = card.holding_player
-		if p != null:
-			if card.get_parent():
-				card.get_parent().remove_child(card)
-			
-			p.add_child(card)
-			if not p.hand.has(card):
-				p.hand.append(card)
-			p.arrange_hand()
-			await get_tree().create_timer(0.5).timeout
-			give_penalty_card(p)
-		return
-
-	if  center_card and center_card.is_inside_tree():
-		center_card.get_parent().remove_child(center_card)
-		used_deck.append("%s:%s" % [center_card.suit, center_card.rank])
-		center_card.queue_free()
-		
-	center_card = card
-	
-	if card.holding_player:
-		var index = card.hand_index
-		if index >= 0 and index < card.holding_player.hand.size():
-			card.holding_player.hand.remove_at(index)
-			card.holding_player.arrange_hand()
-			
-			
-	if card.get_parent():
-		card.get_parent().remove_child(card)
-	add_child(card)
-	
-	card.rotation_degrees = 0
-	card.global_position = $CenterCardSlot.global_position
-	card.set_process(false)
-	card.set_mouse_filter(Control.MOUSE_FILTER_IGNORE)
-	card.flip_card(true)
-	
-	if card.rank == "13":
-		show_message("You played a King! Choose one of your cards to reveal.")
-		allow_manual_flipping = true 
-		awaiting_king_reveal = true
-
-		await get_tree().create_timer(3.0).timeout 
-		allow_manual_flipping = false
-		awaiting_king_reveal = false
-		if was_current_player:
-			next_turn()
-		return
-		
-	elif card.rank == "11":
-		show_message("you played a jack! you can swap in within 4 seconds")
-		jack_swap_mode = true
-		jack_swap_selection["from"] = null
-		jack_swap_selection["to"] = null
-		jack_swap_timer = get_tree().create_timer(4.0)
-		await jack_swap_timer.timeout
-		if jack_swap_mode:
-			jack_swap_mode = false
-			show_message("timeout")
-			next_turn()
-		return
-		
-	if card.rank == "12":
-		show_message("you played a queen")
-		var next_player_index = (current_player_index + 1) % players.size()
-		var next_player = players[next_player_index]
-		
-		if card.get_parent():
-			card.get_parent().remove_child(card)
-		
-		next_player.add_card(card, false)
-		await get_tree().create_timer(0.8).timeout
-		next_turn()
-		return 
-			
-	if card.rank not in ["11", "12", "13"]:
-		reaction_value = card.value
-		reaction_mode = true
-		reacting_players.clear()
-		show_message("match")
-		
-		await get_tree().create_timer(3.0).timeout
-		reaction_mode = false
-		reaction_value = null
-		
-		show_message("reaction window closed.")
-		
-		if was_current_player:
-			next_turn()
-		return
-		
-	if was_current_player:
-		next_turn()
-		
-	var card_data = {
-	"suit": card.suit,
-	"rank": card.rank,
-	"value": card.value
-}
-	
-	rpc("_update_center_card", card_data)
 	
 @rpc("any_peer")
 func start_turn(index):
@@ -672,24 +690,34 @@ func _set_turn(index: int):
 
 func _find_local_player():
 	for p in get_tree().get_nodes_in_group("players"):
-		print("found player with peer_id", p.peer_id)
 		if p.peer_id == multiplayer.get_unique_id():
 			return p
 	return null
 
 
 @rpc("any_peer")
-func request_play_card(card_data: Dictionary):
-	if not multiplayer.is_server():	
+func request_play_card(card_path: NodePath):
+	if not multiplayer.is_server():
 		return
 	
-	var card = preload("res://scenes/Card.tscn").instantiate()
-	card.suit = card_data.suit
-	card.rank = card_data.rank
-	card.value = card_data.value
-	card.set_multiplayer_authority(1)
-	add_child(card)
+	var sender_id = multiplayer.get_remote_sender_id()
+	var card = get_node_or_null(card_path)
 	
+	
+	if card == null:
+		print("card not found")
+		return
+	
+	var player = null
+	for p in players:
+		if p.peer_id == sender_id:
+			player = p
+			break
+	
+	if player != players[current_player_index]:
+		print("not ur turn")
+		return
+		
 	play_card_to_center(card)
 	
 @rpc("any_peer")
@@ -697,35 +725,12 @@ func register_player():
 	var peer_id = multiplayer.get_remote_sender_id()
 	print("Player with ID", peer_id)
 	
-	if registered_peers.has(peer_id):
-		return
-	
-	
-	if registered_peers.size() >=4:
-		print("Too many players")
-		return 
-	
-	registered_peers.append(peer_id)
-	rpc_id(peer_id, "_assign_player_index", registered_peers.size() - 1)
-
-func _spawn_local_player():
-	var player_scene = preload("res://scenes/Player.tscn")
-	var player = player_scene.instantiate()
-	
-	player.peer_id = multiplayer.get_unique_id()
-	player.player_id = -1
-	player.set_multiplayer_authority(multiplayer.get_unique_id())
-	add_child(player)
-	player.add_to_group("players")
-	
-	var screen_size = get_viewport_rect().size
-	player.position = Vector2(screen_size.x/2, screen_size.y-200)
-	player.rotation_degrees = 180
-	
-	players.append(player)
+	if not registered_peers.has(peer_id):
+		registered_peers.append(peer_id)
 	
 @rpc("authority")
 func _assign_player_index(index: int):
+	await get_tree().process_frame
 	var local_player = _find_local_player()
 	
 	if local_player:
@@ -735,3 +740,7 @@ func _assign_player_index(index: int):
 			print(" i m the host")
 	else:
 		print("local player not found")
+		
+	if not local_player:
+		print("failed to assing index")
+		return

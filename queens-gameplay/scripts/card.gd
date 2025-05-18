@@ -23,8 +23,6 @@ func _ready():
 	connect("pressed", Callable(self, "_on_card_clicked"))
 
 
-
-
 func _on_card_clicked():
 	var main = get_tree().get_root().get_node("Main")
 	
@@ -90,12 +88,7 @@ func _on_card_clicked():
 		main.reacting_players.append(holding_player)
 		
 		if value == main.reaction_value:
-			var card_data = {
-					"suit": suit,
-					"rank": rank,
-					"value": value
-				}
-			main.rpc_id(1, "request_play_card", card_data)
+			main.rpc_id(1, "request_play_card", get_path())
 		else:
 			var player = holding_player
 			if player:
@@ -163,9 +156,15 @@ func flip_card(state := false):
 func _gui_input(event):
 	var main = get_tree().get_root().get_node("Main")
 	
-	if holding_player and holding_player.peer_id != multiplayer.get_unique_id():
+	if holding_player==null or holding_player.peer_id != multiplayer.get_unique_id():
+		return
+		
+	if holding_player != main.players[main.current_player_index] :
 		return
 	
+	if not main.players.has(holding_player):
+		return
+		
 	if main.in_flip_phase:
 		return 
 		
@@ -179,19 +178,13 @@ func _gui_input(event):
 			
 			var center = main.get_node("CenterCardSlot")
 			
-			if center == null:
-				print("CenterCardSlot not found")
-				return
-			
-			var center_pos = center.global_position
-			
-			if global_position.distance_to(center_pos) < 350:
+			if center and global_position.distance_to(center.global_position) < 350:
 				var card_data = {
 					"suit": suit,
 					"rank": rank,
 					"value": value
 				}
-				main.rpc_id(1, "request_play_card", card_data)
+				main.rpc_id(1, "request_play_card", get_path())
 			else:
 				if holding_player and holding_player.has_method("arrange_hand"):
 					holding_player.arrange_hand()

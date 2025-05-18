@@ -25,23 +25,20 @@ func add_card(card_instance: Node, face_up := false):
 	card_instance.hand_index = hand.size() - 1
 	
 	arrange_hand()
-		
-	var is_local_player = is_local()
 	
-	if not is_local():
-		card_instance.set_mouse_filter(Control.MOUSE_FILTER_IGNORE)
-		card_instance.flip_card(false)
+	if peer_id == multiplayer.get_unique_id():
+		card_instance.set_mouse_filter(Control.MOUSE_FILTER_PASS)
 	else:
-		if face_up:
-			card_instance.flip_card(true)
-		else:
-			card_instance.flip_card(false)
-		
-	
+		card_instance.set_mouse_filter(Control.MOUSE_FILTER_IGNORE)
+
+	card_instance.flip_card(face_up)
+			
+func is_local():
+	var peer_id = multiplayer.get_unique_id()
+	return peer_id
 			
 func arrange_hand():
-	var spacing_horizontal = 120
-	var spacing_vertical = 120
+	var spacing = 120
 	var total_cards = hand.size()
 	var center_offset = (total_cards - 1) /2.0
 	var rot = int(round(rotation_degrees))
@@ -51,29 +48,14 @@ func arrange_hand():
 		if not is_instance_valid(card):
 			continue
 		card.hand_index = i
-		match rot:
-			0:
-				card.rotation_degrees = 0
-				card.position = Vector2(spacing_horizontal * (i - center_offset),0)
-			180, -180:
-				card.rotation_degrees = 180
-				card.position = Vector2(-spacing_horizontal * (i - center_offset), 0)
-			90:
-				card.rotation_degrees = 90
-				card.position = Vector2(0, spacing_vertical * (i - center_offset))
-			-90:
-				card.rotation_degrees = 90
-				card.position = Vector2(0, -spacing_vertical * (i - center_offset))
-
+		card.position = Vector2(spacing * (i - center_offset), 0)
+		card.rotation_degrees = 0 
 
 func calculate_score(_values_dict):
 	score = 0
 	for card in hand:
 		score += card.value
 	return score
-	
-func is_local():
-	return peer_id == multiplayer.get_unique_id()
 
 
 func update_score_label():
