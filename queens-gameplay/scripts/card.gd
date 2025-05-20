@@ -13,7 +13,7 @@ var holding_player : Node = null
 var hand_index = -1
 var is_dragging = false
 var drag_offset = Vector2()
-
+var card_id: String = ""
 
 func _ready():
 	
@@ -88,7 +88,10 @@ func _on_card_clicked():
 		main.reacting_players.append(holding_player)
 		
 		if value == main.reaction_value:
-			main.rpc_id(1, "request_play_card", get_path())
+			if multiplayer.is_server():
+				main.request_play_card_by_id(get_path())
+			else:
+				main.rpc_id(1, "request_play_card_by_id", card_id)
 		else:
 			var player = holding_player
 			if player:
@@ -115,8 +118,13 @@ func _on_card_clicked():
 			return 
 				
 		return
-func flip_card(state := false):
-	var main = get_tree().get_root().get_node("Main")
+func flip_card(state := false, main: Node = null):
+	
+	if main == null:
+		main = get_tree().root.get_node_or_null("Main")
+	if main == null:
+		print("Main not found in the scene tree")
+		return
 		
 	if permanent_face_up:
 		is_flipped = true
@@ -145,7 +153,7 @@ func flip_card(state := false):
 		if main.flip_count >=2:
 			return
 	
-	if main.allow_manual_flipping and is_flipped and not permanent_face_up:
+	if main.allow_manual_flipping and is_flipped and not permanent_face_up and not self.permanent_face_up:
 		await get_tree().create_timer(3.0).timeout
 		is_flipped = false
 		self.texture_normal = card_back_texture
@@ -179,12 +187,11 @@ func _gui_input(event):
 			var center = main.get_node("CenterCardSlot")
 			
 			if center and global_position.distance_to(center.global_position) < 350:
-				var card_data = {
-					"suit": suit,
-					"rank": rank,
-					"value": value
-				}
-				main.rpc_id(1, "request_play_card", get_path())
+				
+				if multiplayer.is_server():
+					main.request_play_card_by_id(card_id)
+				else:
+					main.rpc_id(1, "request_play_card_by_id", card_id)
 			else:
 				if holding_player and holding_player.has_method("arrange_hand"):
 					holding_player.arrange_hand()
