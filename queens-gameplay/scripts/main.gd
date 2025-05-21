@@ -48,7 +48,6 @@ var card_registry := {}
 
 @rpc("any_peer", "reliable")
 func _update_center_card(card_data: Dictionary):
-	
 		
 	if is_instance_valid(center_card):
 		if center_card.get_parent():
@@ -68,13 +67,13 @@ func _update_center_card(card_data: Dictionary):
 	new_card.global_position = $CenterCardSlot.global_position
 	new_card.rotation_degrees = 0
 	
-	var main = get_tree().root.get_node_or_null("Main")
 	
-	if main: 
-		new_card.flip_card(true, main)
-	
+	add_child(new_card)
 	center_card = new_card
-	add_child(center_card)
+	
+	await get_tree().process_frame
+	new_card.flip_card(true)
+	
 	
 @rpc("any_peer", "reliable")
 func play_card_to_center(card):
@@ -135,26 +134,19 @@ func play_card_to_center(card):
 	var card_data = {"suit": card.suit,"rank": card.rank,"value": card.value, "card_id": card.card_id}
 	
 	rpc("_update_center_card", card_data)
-	if multiplayer.is_server():
-		_update_center_card(card_data)
-	
 	
 	if card.rank == "13": 
-		show_message("You played a King! Choose one of your cards to reveal.")
-		allow_manual_flipping = true 
-		awaiting_king_reveal = true
-		await get_tree().create_timer(3.0).timeout 
-		allow_manual_flipping = false
-		awaiting_king_reveal = false
+		var peer_id = card.holding_player.peer_id
+		
+		if multiplayer.get_unique_id() == peer_id:
+			handle_king_effect()
+		else:
+			rpc_id(peer_id, "handle_king_effect")
 		if was_current_player:
 			next_turn()
 		return
-		
 	elif card.rank == "11":
-		show_message("you played a jack! you can swap in within 4 seconds")
-		jack_swap_mode = true
-		jack_swap_selection["from"] = null
-		jack_swap_selection["to"] = null
+		rpc("_start_jack_swap_mode")
 		jack_swap_timer = get_tree().create_timer(4.0)
 		await jack_swap_timer.timeout
 		if jack_swap_mode:
@@ -200,11 +192,30 @@ func is_local():
 	
 	return peer_id
 		
+		
+@rpc("any_peer", "reliable")
+func handle_king_effect():
+	show_message("You played a King! Choose one of your cards to reveal.")
+	allow_manual_flipping = true 
+	awaiting_king_reveal = true
+	await get_tree().create_timer(3.0).timeout 
+	allow_manual_flipping = false
+	awaiting_king_reveal = false
+
+func _start_jack_swap_mode():
+	jack_swap_mode = true
+	jack_swap_selection["from"] = null
+	jack_swap_selection["to"] = null
+	show_message("jack played! select a card from ur opponent ")
+
 func _create_players():
 	players.clear()
 
 	var peer_ids = multiplayer.get_peers()
-	peer_ids.append(multiplayer.get_unique_id()) 
+	var local_id = multiplayer.get_unique_id()
+	
+	if not peer_ids.has(local_id):
+		peer_ids.append(local_id)
 
 	var center_pos = $CenterCardSlot.global_position
 	var radius = 360
@@ -262,6 +273,9 @@ func _ready():
 	
 	local_peer_id = multiplayer.get_unique_id()
 	
+	await get_tree().create_timer(0.2).timeout
+	set_multiplayer_authority(multiplayer.get_unique_id())
+	print("authority assigned to:", multiplayer.get_unique_id())
 	multiplayer.peer_connected.connect(func(id): print("connected:", id))
 	multiplayer.connected_to_server.connect(func():print("connected to server"))
 	multiplayer.connection_failed.connect(func(): print("Connection failed"))
@@ -375,7 +389,8 @@ func _start_game_server():
 		"value": values[parts[1]]
 }
 	rpc("_update_center_card", card_data)
-	_update_center_card(card_data)
+	if multiplayer.is_server():
+		_update_center_card(card_data)
 	current_player_index = 0
 	rpc("_set_turn", current_player_index)
 	_set_turn(current_player_index)
@@ -397,6 +412,8 @@ func initializate_center_card():
 		"value": values[parts[1]]
 }
 	rpc("_update_center_card", card_data)
+	if multiplayer.is_server():
+		_update_center_card(card_data)
 func _deal_initial_hands():
 	for player in players:
 		var hand = []
@@ -441,6 +458,7 @@ func _receive_player_hand(owner_peer_id: int, cards: Array):
 		card.card_id = card_data["card_id"]
 		card_registry[card.card_id] = card
 		
+		card.holding_player = player
 		var is_local = multiplayer.get_unique_id() == owner_peer_id
 		var face_up = is_local and (player.hand.size()<2)
 		
@@ -594,7 +612,6 @@ func create_card_from_deck(player: Node = null):
 		
 	return card
 
-
 @rpc("authority")
 func give_and_hide_card(player):
 	var card_str = shuffled_deck.pop_back()
@@ -631,6 +648,7 @@ func _receive_drawn_card(card_data: Dictionary):
 			break
 			
 	if player:
+		card.holding_player = player
 		add_child(card)
 		card.global_position = Vector2(600, 400)
 		if is_local: 
@@ -659,17 +677,31 @@ func hide_all_flipped_cards():
 				
 	if is_instance_valid(center_card):
 		center_card.flip_card(true)
-				
-func execute_jack_swap():
-	jack_swap_mode = false
-	var from_card = jack_swap_selection["from"]
-	var to_card = jack_swap_selection["to"]
-	if from_card == null or to_card==null:
-		return
 		
-	from_card.modulate = Color(1,1,1)
-	to_card.modulate = Color(1,1,1)
+		
+		
+@rpc("any_peer", "reliable")
+func execute_jack_swap(from_id: String, to_id: String):
 	
+	if not card_registry.has(from_id) or not card_registry.has(to_id):
+		print("invalid jack swap")
+		return
+	
+	var from_card = card_registry[from_id]
+	var to_card = card_registry[to_id]
+	
+	_swap_cards(from_card, to_card)
+	
+	rpc("_sync_jack_swap", from_id, to_id)
+	
+	
+	jack_swap_mode = false
+	show_message("swap done")
+	await get_tree().create_timer(1.0).timeout
+	next_turn()
+
+
+func _swap_cards(from_card, to_card):
 	var from_player = from_card.holding_player
 	var to_player = to_card.holding_player
 	var from_index = from_card.hand_index
@@ -695,10 +727,14 @@ func execute_jack_swap():
 	from_player.arrange_hand()
 	to_player.arrange_hand()
 	
-	show_message("swap done")
-	await get_tree().create_timer(1.0).timeout
-	next_turn()
+@rpc("any_peer", "reliable")
+func _sync_jack_swap(from_id: String, to_id: String):
+	if not card_registry.has(from_id) or not card_registry.has(to_id):
+		return
+	_swap_cards(card_registry[from_id], card_registry[to_id])
 	
+
+
 func give_penalty_card(player):
 	var card = create_card_from_deck(player)
 	if card:
@@ -789,31 +825,58 @@ func _find_local_player():
 @rpc("any_peer")
 func request_play_card_by_id(card_id: String):
 	
-	var sender_id = multiplayer.get_remote_sender_id()
-	var is_server = multiplayer.is_server()
-	var local_id = multiplayer.get_unique_id()
-	
-	
-	var expected_peer = ( local_id if is_server and sender_id == 1 else sender_id)
+	var sender_id = get_effective_sender_id()
 	
 	
 	if not card_registry.has(card_id):
 		print("card not found")
 		return
-		
-	var card  = card_registry[card_id]
 	
 	
-	if card.holding_player == null or card.holding_player.peer_id != expected_peer:
-		print("it not ur card")
-		return
-		
+	var card = card_registry[card_id]
+	
+	if card.holding_player == null: 
+		print("No holding player!")
+		return 
+	
+	print("Expected peer:", sender_id)
+	print("card peer_id:", card.holding_player.peer_id)
+	
+	
+	if card.holding_player.peer_id != sender_id:
+		print("not ur card")
+		return 
+	
 	if  card.holding_player != players[current_player_index]:
 		print("not ur turn")
 		return
-		
-	play_card_to_center(card)
 	
+	rpc("_remove_card_global", card_id)
+	play_card_to_center(card)
+
+@rpc("any_peer")
+func _remove_card_global(card_id: String):
+	if card_registry.has(card_id):
+		var card = card_registry[card_id]
+		if is_instance_valid(card):
+			if card.get_parent():
+				card.get_parent().remove_child(card)
+			card.queue_free()
+			card_registry.erase(card_id)
+			
+
+
+func get_effective_sender_id() -> int:
+	if multiplayer.is_server():
+		var id = multiplayer.get_remote_sender_id()
+		if id == 1 or id == 0:
+			return multiplayer.get_unique_id()
+		return id
+	else:
+		return multiplayer.get_remote_sender_id()
+
+
+
 @rpc("any_peer")
 func register_player():
 	var peer_id = multiplayer.get_remote_sender_id()

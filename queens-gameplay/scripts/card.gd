@@ -42,17 +42,18 @@ func _on_card_clicked():
 			self.modulate = Color(1, 1, 0.5)
 			main.show_message("selected the first card to swap")
 			return
-			
 		elif main.jack_swap_selection["to"] == null:
 			if holding_player == main.players[main.current_player_index]:
-				main.show_message("Second card must be from another player.")
-				return
-			if self == main.jack_swap_selection["from"]:
+				main.show_message("Second card must be from another player")
 				return
 			main.jack_swap_selection["to"] = self
 			self.modulate = Color(1, 1, 0.5)
-			main.show_message("swapping cards..")
-			main.execute_jack_swap()
+
+			if multiplayer.is_server():
+				main.execute_jack_swap(main.jack_swap_selection["from"].card_id, main.jack_swap_selection["to"].card_id)
+			else:
+				main.rpc_id(1, "execute_jack_swap", main.jack_swap_selection["from"].card_id, main.jack_swap_selection["to"].card_id)
+			main.jack_swap_mode = false
 			return
 		 
 	
