@@ -16,13 +16,6 @@ var current_turn_index := -1
 func _ready():
 	if player_id == -1:
 		join_game()
-	print("Sending join request...")
-	var url = "http://localhost:3000/join"
-	var headers = ["Content-Type: application/json"]
-	var body = JSON.stringify({"room_id": "room1"})
-	var err = http.request(url, headers, HTTPClient.METHOD_POST, body)
-	if err != OK:
-		printerr("Failed to join:", err)
 	
 
 func join_game():

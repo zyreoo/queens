@@ -46,6 +46,10 @@ function nextTurn() {
 
 const { Mars } = require("lucide-react");
 
+function drawHand(){
+  return deck(0, 4)
+}
+
 app.post("/join", (req, res) => {
   try {
     if (players.length >= MAX_PLAYERS) {
