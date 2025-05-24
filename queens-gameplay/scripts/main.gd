@@ -4,7 +4,7 @@ extends Node2D
 @onready var message_label := $MessageLabel
 @onready var start_button := $StartGameButton
 
-var player_id: int = -1
+var player_id: = ""
 var center_card: Dictionary = {}
 var poll_timer := Timer.new()
 var current_player_id = null
@@ -14,48 +14,64 @@ var player_index := -1
 var current_turn_index := -1
 
 func _ready():
-	if player_id == -1:
+	player_id = ProjectSettings.get_setting("application/config/player_id", "")
+	if player_id == "":
 		join_game()
-	
+	add_child(poll_timer)
+	poll_timer.wait_time = 1.0
+	poll_timer.timeout.connect(fetch_state)
+	poll_timer.start()
+	http.request_completed.connect(_on_request_completed)
+	start_button.pressed.connect(_on_start_game)
 
 func join_game():
-	if player_id != -1:
-		print("already joineds as player")
-		return
-		
+	print("Sending join request")
 	var url = "http://localhost:3000/join"
 	var headers = ["Content-Type: application/json"]
-	var body = JSON.stringify({"room_id": "room1"})
+	var body_dict = {
+	"room_id": "room1"
+	}
+	if player_id != "":
+		body_dict["player_id"] = player_id
+	var body = JSON.stringify(body_dict)
 	var err = http.request(url, headers, HTTPClient.METHOD_POST, body)
 	if err != OK:
 		printerr("Failed to join:", err)
+
 
 func _on_start_game():
 	message_label.text = "Game start pressed (no-op unless handled on server)"
 
 func _on_request_completed(result, code, headers, body):
 	var json = JSON.parse_string(body.get_string_from_utf8())
-	if not json: return
-
+	if not json:
+		print("Invalid JSON from server")
+		return
+	if json.has("player_id"):
+		player_id = json["player_id"]
+		ProjectSettings.set_setting("application/config/player_id", player_id)
+		ProjectSettings.save()
+		
 	if json.has("player_index"):
 		player_index = int(json["player_index"])
 		
 	if json.has("current_turn_index"):
 		current_turn_index = int(json["current_turn_index"])
 		
-		if player_index == current_turn_index:
-			message_label.text = " Your turn!"
-		else:
-			message_label.text = " Waiting for player %d" % current_turn_index
-
 	if json.has("hand"):
 		for card_data in json["hand"]:
 			add_card_to_hand(card_data, player_index)
-
+			
+			
 	if json.has("center_card"):
 		show_center_card(json["center_card"])
-
-
+		
+		
+	if player_index == current_turn_index:
+		message_label.text = "Your turn!"
+	else:
+		message_label.text = "Waiting for player %d" % current_turn_index
+		
 func _on_card_pressed(card_data: Dictionary):
 	if player_index != current_turn_index:
 		message_label.text = "not ur turn "

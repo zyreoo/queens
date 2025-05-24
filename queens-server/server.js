@@ -2,6 +2,7 @@ const express = require("express");
 const http = require("http");
 const cors = require("cors");
 const {v4: uuidv4} = require('uuid');
+const { totalmem } = require("os");
 
 const app = express();
 app.use(cors());
@@ -11,7 +12,7 @@ const suits = ["Clubs", "Spades", "Diamonds", "Hearts"];
 const ranks = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13"];
 const values = Object.fromEntries(ranks.map((r) => [r, parseInt(r)]));
 
-const MAX_PLAYERS = 4;
+const MAX_PLAYERS = 2;
 let players = [];
 let deck = [];
 
@@ -26,7 +27,6 @@ function shuffleDeck(deck){
   }
 }
 
-createDeck();
 
 function createDeck() {
   deck = [];
@@ -40,18 +40,44 @@ function createDeck() {
 function nextTurn() {
   const previousTurn = currentTurnIndex;
   currentTurnIndex = (currentTurnIndex + 1) % players.length;
-  console.log(`turn changed: ${previousTurn} -> ${currentTurnIndex}`);
+  console.log(`turn changed: ${previousTurn} to ${currentTurnIndex}`);
 }
 
-
-const { Mars } = require("lucide-react");
 
 function drawHand(){
-  return deck(0, 4)
+  return deck.splice(0, 4); 
 }
+
+
+function getCenterCard(){
+  if (!centerCard) centerCard = deck.pop();
+  return centerCard
+}
+
+
+createDeck()
 
 app.post("/join", (req, res) => {
   try {
+    
+    const incomingId = req.body.player_id;
+
+    if (incomingId) {
+      const existing = players.find(p => p.id === incomingId);
+      if (existing) {
+        return res.json({
+          status: "ok",
+          player_id: existing.id,
+          player_index: existing.index,
+          hand: existing.hand,
+          center_card: getCenterCard(),
+          current_turn_index: currentTurnIndex,
+          total_players: players.length
+        });
+      }
+    }
+
+
     if (players.length >= MAX_PLAYERS) {
       return res.status(400).json({
         status: 'error',
@@ -68,11 +94,10 @@ app.post("/join", (req, res) => {
     };
 
     players.push(newPlayer);
-    console.log(`Player ${newPlayer.index} joined the game. Total players: ${players.length}`);
+    console.log(`player ${newPlayer.index} joined the game,  total players: ${players.length}`);
 
     res.json({
       status: 'ok', 
-      message: `Joined as player ${newPlayer.index}`,
       player_id: playerID,
       player_index: newPlayer.index, 
       hand: newPlayer.hand, 
@@ -80,6 +105,9 @@ app.post("/join", (req, res) => {
       current_turn_index: currentTurnIndex,
       total_players: players.length
     });
+
+
+
   } catch (error) {
     console.error('Error in join:', error);
     res.status(500).json({
@@ -92,18 +120,6 @@ app.post("/play_card", (req, res) => {
   try {
     const { player_index, card } = req.body;
 
-    if (player_index === undefined || card === undefined) {
-      return res.status(400).json({
-        status: "error",
-        message: "Missing required parameters"
-      });
-    }
-
-    console.log(`${currentTurnIndex}`);
-    console.log(`${player_index}`);
-    console.log(`${players.length}`);
-    console.log(`${players.map(p => p.index).join(', ')}`);
-
     if (player_index !== currentTurnIndex) {
       return res.status(403).json({ 
         status: "error", 
@@ -111,12 +127,12 @@ app.post("/play_card", (req, res) => {
         game_state: {
           current_turn: currentTurnIndex,
           total_players: players.length,
-          active_players: players.map(p => p.index)
         }
       });
     }
 
     const player = players.find(p => p.index === player_index);
+
     if (!player) {
       return res.status(404).json({
         status: "error",
@@ -130,7 +146,6 @@ app.post("/play_card", (req, res) => {
 
     res.json({
       status: "ok",
-      message: "Card played",
       center_card: centerCard,
       current_turn_index: currentTurnIndex,
       total_players: players.length,
@@ -140,7 +155,6 @@ app.post("/play_card", (req, res) => {
     console.error('Error in play_card:', error);
     res.status(500).json({
       status: 'error',
-      message: 'Internal server error'
     });
   }
 });
@@ -167,26 +181,6 @@ app.get("/state", (req, res) => {
 });
 
 
-app.get("/check_player/:playerId", (req, res) => {
-  const { playerId } = req.params;
-  const player = players.find(p => p.id === playerId);
-  
-  if (!player) {
-    return res.status(404).json({
-      status: 'error',
-      message: 'Player not found'
-    });
-  }
-
-  player.lastSeen = Date.now();
-  res.json({
-    status: 'ok',
-    player_index: player.index,
-    current_turn_index: currentTurnIndex
-  });
-});
-
-
 app.post("/reset", (req, res) => {
   resetGame();
   res.json({
@@ -195,28 +189,6 @@ app.post("/reset", (req, res) => {
   });
 });
 
-
-setInterval(() => {
-  const now = Date.now();
-  const inactiveTimeout = 30000;
-  
-  const activePlayers = players.filter(player => {
-    const isActive = (now - player.lastSeen) < inactiveTimeout;
-    if (!isActive) {
-      console.log(`Removing inactive player ${player.index}`);
-    }
-    return isActive;
-  });
-
-  if (activePlayers.length !== players.length) {
-    console.log(`Cleaned up ${players.length - activePlayers.length} inactive players`);
-    players = activePlayers;
-    if (players.length === 0) {
-      resetGame();
-    }
-  }
-}, 30000);
-
 http.createServer(app).listen(3000, () => {
-  console.log("Server 12running on http://localhost:3000");
+  console.log("Server  running on http://localhost:3000");
 }); 
