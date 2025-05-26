@@ -49,8 +49,7 @@ func _on_request_completed(result, code, headers, body):
 		return
 	if json.has("player_id"):
 		player_id = json["player_id"]
-		ProjectSettings.set_setting("application/config/player_id", player_id)
-		ProjectSettings.save()
+		ProjectSettings.set_setting("application/config/player_id", player_id)	
 		
 	if json.has("player_index"):
 		player_index = int(json["player_index"])
@@ -80,20 +79,26 @@ func _on_card_pressed(card_data: Dictionary):
 	play_card(card_data)
 			
 func add_card_to_hand(card_data: Dictionary, for_player_index: int):
+	
+	print("Adding card to player", for_player_index, " | local player index:", player_index)
 	var card = preload("res://scenes/Card.tscn").instantiate()
 	card.set_data(card_data)
-
+	
+	
+	
 	if for_player_index == player_index:
 		card.pressed.connect(func(): _on_card_pressed(card_data))
-		$Player0/HandContainer.add_child(card)
 	else:
 		card.disabled = true
 		card.flip_card(false)
-		var hand_node = get_node_or_null("Player%d/HandContainer" % for_player_index)
-		if hand_node:
-			hand_node.add_child(card)
-
-
+		
+		
+	var player_node = get_node_or_null("Player%d" % for_player_index)
+	if not player_node:
+		print("ERROR: Cannot find player node: Player%d" % for_player_index)
+		return
+			
+	player_node.add_child(card, for_player_index == player_index)
 
 func clear_hand():
 	for child in get_children():

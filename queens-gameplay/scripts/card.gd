@@ -20,7 +20,7 @@ func set_data(data: Dictionary):
 	rank = data["rank"]
 	value = data["value"]
 	card_data = data
-	var image_path = "res://assets/%s %s.png" % [suit, rank]
+	var image_path = "res://assets/%s_%s.png" % [suit, rank]
 	texture_normal = load(image_path)
 
 func _gui_input(event):

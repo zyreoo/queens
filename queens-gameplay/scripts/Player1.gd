@@ -19,22 +19,19 @@ func add_card(card_instance: Node, face_up := false):
 
 	card_instance.holding_player = self
 	card_instance.hand_index = hand.size() - 1
-
-	arrange_hand()
+	
+	
+	
 	card_instance.flip_card(face_up)
+	
+	arrange_hand()
 
 func arrange_hand():
-	var spacing = 120
-	var total_cards = hand.size()
-	var center_offset = (total_cards - 1) / 2.0
-
-	for i in range(total_cards):
+	var spacing = 30
+	var start_x = 0
+	for i in range(hand.size()):
 		var card = hand[i]
-		if not is_instance_valid(card):
-			continue
-		card.hand_index = i
-		card.position = Vector2(spacing * (i - center_offset), 0)
-		card.rotation_degrees = 0
+		card.position = Vector2(start_x + i * spacing, 0)
 
 func calculate_score():
 	score = 0

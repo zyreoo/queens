@@ -12,7 +12,7 @@ const suits = ["Clubs", "Spades", "Diamonds", "Hearts"];
 const ranks = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13"];
 const values = Object.fromEntries(ranks.map((r) => [r, parseInt(r)]));
 
-const MAX_PLAYERS = 2;
+const MAX_PLAYERS = 4;
 let players = [];
 let deck = [];
 
@@ -190,5 +190,5 @@ app.post("/reset", (req, res) => {
 });
 
 http.createServer(app).listen(3000, () => {
-  console.log("Server  running on http://localhost:3000");
+  console.log("Server  222 running on http://localhost:3000");
 }); 
