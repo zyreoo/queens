@@ -2,7 +2,6 @@ const express = require("express");
 const http = require("http");
 const cors = require("cors");
 const {v4: uuidv4} = require('uuid');
-const { totalmem } = require("os");
 
 const app = express();
 app.use(cors());
@@ -30,12 +29,39 @@ function shuffleDeck(deck){
 
 function createDeck() {
   deck = [];
-  for (let suit of suits)
-    for (let rank of ranks)
+  for (let suit of suits){
+    for (let rank of ranks){
       deck.push({ suit, rank, value: values[rank] });
+    }
+  }
   shuffleDeck(deck);
-
 }
+
+function resetGame() {
+  players = [];
+  createDeck();
+  centerCard = null;
+  currentTurnIndex = 0;
+  console.log("game state reset.");
+}
+
+function drawHand(){
+  return deck.splice(0, 4); 
+}
+
+
+function getCenterCard() {
+  if (!centerCard) {
+    if (deck.length === 0) {
+      createDeck();
+      console.log("Deck recreated to get center card.");
+    }
+    centerCard = deck.pop();
+    console.log("Center card set to:", centerCard);
+  }
+  return centerCard;
+}
+
 
 function nextTurn() {
   const previousTurn = currentTurnIndex;
@@ -43,16 +69,6 @@ function nextTurn() {
   console.log(`turn changed: ${previousTurn} to ${currentTurnIndex}`);
 }
 
-
-function drawHand(){
-  return deck.splice(0, 4); 
-}
-
-
-function getCenterCard(){
-  if (!centerCard) centerCard = deck.pop();
-  return centerCard
-}
 
 
 createDeck()
@@ -77,7 +93,11 @@ app.post("/join", (req, res) => {
       }
     }
 
-
+    if (players.length === 0) {
+      createDeck();
+      centerCard = null;
+    }
+    
     if (players.length >= MAX_PLAYERS) {
       return res.status(400).json({
         status: 'error',
@@ -190,5 +210,5 @@ app.post("/reset", (req, res) => {
 });
 
 http.createServer(app).listen(3000, () => {
-  console.log("Server  222 running on http://localhost:3000");
+  console.log("Serverrunning on http://localhost:3000");
 }); 

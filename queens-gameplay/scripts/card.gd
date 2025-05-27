@@ -9,7 +9,6 @@ var drag_offset := Vector2()
 var start_position := Vector2()
 var original_parent: Node= null
 
-
 func _ready():
 	start_position = position
 	original_parent = get_parent()
@@ -22,7 +21,18 @@ func set_data(data: Dictionary):
 	card_data = data
 	var image_path = "res://assets/%s_%s.png" % [suit, rank]
 	texture_normal = load(image_path)
-
+	
+	
+func flip_card(face_up: bool):
+	if face_up:
+		var image_path = "res://assets/%s_%s.png" % [suit, rank]
+		texture_normal = load(image_path)
+	else: 
+		texture_normal = load("res://assets/card_back_3.png")
+	if not texture_normal:
+		print("Failed to load card back image: res://assets/card_back_3.png")
+		texture_normal = load("res://assets/default_card.png")  # Fallback image
+		visible = true
 func _gui_input(event):
 	var main = get_node_or_null("/root/Main")
 	if not main:
@@ -54,6 +64,7 @@ func _gui_input(event):
 			if original_parent:
 				original_parent.add_child(self)
 			position = start_position
+
 func _process(delta):
 	if dragging:
 		global_position = get_global_mouse_position() - drag_offset
