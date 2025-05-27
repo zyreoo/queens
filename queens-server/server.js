@@ -11,7 +11,7 @@ const suits = ["Clubs", "Spades", "Diamonds", "Hearts"];
 const ranks = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12", "13"];
 const values = Object.fromEntries(ranks.map((r) => [r, parseInt(r)]));
 
-const MAX_PLAYERS = 4;
+const MAX_PLAYERS = 2;
 let players = [];
 let deck = [];
 
@@ -51,6 +51,9 @@ function drawHand(){
 
 
 function getCenterCard() {
+  console.log(" getCenterCard called. Deck length:", deck.length, "Center card is currently:", centerCard);
+
+
   if (!centerCard) {
     if (deck.length === 0) {
       createDeck();
@@ -96,6 +99,7 @@ app.post("/join", (req, res) => {
     if (players.length === 0) {
       createDeck();
       centerCard = null;
+      console.log(" first player joined: resetting deck and center card.");
     }
     
     if (players.length >= MAX_PLAYERS) {
@@ -116,12 +120,18 @@ app.post("/join", (req, res) => {
     players.push(newPlayer);
     console.log(`player ${newPlayer.index} joined the game,  total players: ${players.length}`);
 
+
+    const currentCenter = getCenterCard();
+
+    console.log(" center card: ", currentCenter)
+
+
     res.json({
       status: 'ok', 
       player_id: playerID,
       player_index: newPlayer.index, 
       hand: newPlayer.hand, 
-      center_card: getCenterCard(), 
+      center_card: currentCenter, 
       current_turn_index: currentTurnIndex,
       total_players: players.length
     });
@@ -210,5 +220,5 @@ app.post("/reset", (req, res) => {
 });
 
 http.createServer(app).listen(3000, () => {
-  console.log("Serverrunning on http://localhost:3000");
+  console.log("Serverr  unning on http://localhost:3000");
 }); 

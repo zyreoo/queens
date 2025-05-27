@@ -12,31 +12,28 @@ var fetching := false
 var has_joined := false
 var player_index := -1
 var current_turn_index := -1
+var last_request_type := ""
 
 func _ready():
 	player_id = ProjectSettings.get_setting("application/config/player_id", "")
-	if player_id == "":
-		join_game()
+	join_game()
 	add_child(poll_timer)
 	poll_timer.wait_time = 1.0
 	poll_timer.timeout.connect(fetch_state)
 	poll_timer.start()
+	
 	http.request_completed.connect(_on_request_completed)
 	start_button.pressed.connect(_on_start_game)
 
 func join_game():
-	print("Sending join request")
+	last_request_type = "join"
 	var url = "http://localhost:3000/join"
 	var headers = ["Content-Type: application/json"]
-	var body_dict = {
-	"room_id": "room1"
-	}
+	var body_dict = { "room_id": "room1" }
 	if player_id != "":
 		body_dict["player_id"] = player_id
 	var body = JSON.stringify(body_dict)
-	var err = http.request(url, headers, HTTPClient.METHOD_POST, body)
-	if err != OK:
-		printerr("Failed to join:", err)
+	http.request(url, headers, HTTPClient.METHOD_POST, body)
 
 
 func _on_start_game():
@@ -44,33 +41,45 @@ func _on_start_game():
 
 func _on_request_completed(_result, _code, _headers, body):
 	var json = JSON.parse_string(body.get_string_from_utf8())
-	if not json:
-		print("Invalid JSON from server")
+
+	if json.has("status") and json["status"] == "error":
+		print("Server error:", json.get("message", "unknown"))
+		message_label.text = "❌ " + json.get("message", "Unknown error")
 		return
-		print("Full server response: ", json)
-	if json.has("player_id"):
-		player_id = json["player_id"]
-		ProjectSettings.set_setting("application/config/player_id", player_id)    
-	if json.has("player_index"):
-		player_index = int(json["player_index"])
-	if json.has("current_turn_index"):
+		
+	if last_request_type == "join":
+		if json.has("player_id"):
+			player_id = json["player_id"]
+			ProjectSettings.set_setting("application/config/player_id", player_id)
+			
+		if json.has("player_index"):
+			player_index = int(json["player_index"])
+		
+		if json.has("current_turn_index"):
 			current_turn_index = int(json["current_turn_index"])
-	var player_node = get_node_or_null("Player%d" % player_index)
-	if player_node:
-		player_node.clear_hand()
-	if json.has("hand"):
-		for card_data in json["hand"]:
-			add_card_to_hand(card_data, player_index)
+			
+		var player_node = get_node_or_null("Player%d" % player_index)
+		if player_node:
+			player_node.clear_hand()
+			
+		if json.has("hand"):
+			for card_data in json["hand"]:
+				add_card_to_hand(card_data, player_index)
+				
+		has_joined = true
 	if json.has("center_card") and json["center_card"] != null and json["center_card"] is Dictionary:
 		show_center_card(json["center_card"])
-	else:
-		print("No valid center card data received:", json.get("center_card", "N/A"))
 		
-	has_joined = true
+	if json.has("current_turn_index"):
+		current_turn_index = int(json["current_turn_index"])
+		
 	if player_index == current_turn_index:
 		message_label.text = "Your turn!"
 	else:
 		message_label.text = "Waiting for player %d" % current_turn_index
+		
+	fetching = false
+		
 func _on_card_pressed(card_data: Dictionary):
 	if player_index != current_turn_index:
 		message_label.text = "not ur turn "
@@ -106,7 +115,7 @@ func clear_hand():
 			child.queue_free()
 
 func show_center_card(card_data: Dictionary):
-	if card_data == null or not card_data is Dictionary:  # Check for null or invalid type
+	if card_data == null or not card_data is Dictionary: 
 		print("Invalid or null card data received:", card_data)
 		return
 	if not card_data.has("suit") or not card_data.has("rank"):
@@ -135,8 +144,6 @@ func fetch_state():
 	if fetching: 
 		return
 	fetching = true
-		
+	last_request_type = "state"
 	var url = "http://localhost:3000/state"
-	var err = http.request(url)
-	if err != OK:
-		message_label.text = "Fetch error: %s" % err
+	http.request(url)
