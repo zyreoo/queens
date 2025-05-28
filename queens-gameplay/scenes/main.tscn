@@ -43,11 +43,11 @@ text = "Start Game"
 offset_right = 40.0
 offset_bottom = 23.0
 
-[node name="queens" type="Button" parent="."]
-offset_left = 1649.0
-offset_top = 598.0
-offset_right = 1721.0
-offset_bottom = 631.0
+[node name="queens_button" type="Button" parent="."]
+offset_left = 345.0
+offset_top = 325.0
+offset_right = 417.0
+offset_bottom = 356.0
 text = "QUEENS"
 
 [node name="HTTPRequest" type="HTTPRequest" parent="."]
@@ -67,7 +67,7 @@ offset_right = 330.0
 offset_bottom = 171.0
 
 [node name="Player1" type="Node2D" parent="."]
-position = Vector2(634, 448)
+position = Vector2(660, 448)
 script = ExtResource("2_0wfyh")
 
 [node name="HandContainer" type="VBoxContainer" parent="Player1"]
@@ -97,5 +97,5 @@ offset_bottom = 102.0
 [node name="Multiplayer" type="Node2D" parent="."]
 script = SubResource("GDScript_o5qli")
 
-[connection signal="pressed" from="StartGameButton" to="." method="_on_start_game_button_pressed"]
-[connection signal="pressed" from="queens" to="." method="_on_queens_pressed"]
+[connection signal="pressed" from="StartGameButton" to="." method="_on_start_game"]
+[connection signal="pressed" from="queens_button" to="." method="_on_queens_button_pressed"]

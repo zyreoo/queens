@@ -19,11 +19,9 @@ func add_card(card_instance: Node, face_up := false):
 
 	hand_container.add_child(card_instance)
 	hand.append(card_instance)
-
 	card_instance.holding_player = self
 	card_instance.hand_index = hand.size() - 1
 	card_instance.flip_card(face_up)
-	
 	arrange_hand()
 
 func arrange_hand():
@@ -31,7 +29,6 @@ func arrange_hand():
 	var total_width = (hand.size() - 1) * spacing
 	var start_x = -total_width / 2  
 	var screen_size = get_viewport_rect().size
-	
 	for i in range(hand.size()):
 		var card = hand[i]
 		var x_pos = start_x + i * spacing
@@ -42,7 +39,7 @@ func arrange_hand():
 			card.position.x -= global_card_pos.x 
 		elif global_card_pos.x + card.size.x > screen_size.x:
 			card.position.x -= (global_card_pos.x + card.size.x - screen_size.x)
-		print("Card %d positioned at: %s (global: %s)" % [i, card.position, global_card_pos])
+			
 		
 func clear_hand():
 	for card in hand:
@@ -52,7 +49,14 @@ func clear_hand():
 func calculate_score():
 	score = 0
 	for card in hand:
-		score += card.value
+		if card.card_data["rank"] == "12":
+			score += 0
+		elif card.card_data["rank"] == "1":
+			score += 1
+		elif card.card_data["rank"] in ["11", "13"]:
+			score += 10
+		else:
+			score += int(card.card_data["rank"])
 	return score
 
 func update_score_label():
