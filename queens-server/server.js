@@ -27,7 +27,9 @@ function createRoom() {
     queensTriggered: false,
     queensPlayerIndex: null,
     finalRoundActive: false,
-    finalTurnCount: 0
+    finalTurnCount: 0,
+    initialSelectionMode: true,
+    lastActivity: Date.now()
   };
   createDeck(roomId);
   return roomId;
@@ -45,7 +47,7 @@ function createDeck(roomId) {
   room.deck = [];
   for (let suit of suits){
     for (let rank of ranks){
-      room.deck.push({ suit, rank, value: values[rank], card_id: `${suit}_${rank}_${Date.now()}`});
+      room.deck.push({ suit, rank, value: values[rank], card_id: `${suit}_${rank}_${Date.now()}`, is_face_up: false });
     }
   }
   shuffleDeck(room.deck);
@@ -89,8 +91,24 @@ function nextTurn(roomId) {
       return { game_over: true, ...result };
     }
   }
-  room.currentTurnIndex = (room.currentTurnIndex + 1) % room.players.length;
+  const nextPlayerIndex = (room.currentTurnIndex + 1) % room.players.length;
+  const nextPlayer = room.players[nextPlayerIndex];
+  
+  if (!room.finalRoundActive || nextPlayerIndex !== room.queensPlayerIndex) {
+    if (room.deck.length > 0) {
+      const drawnCard = room.deck.pop();
+      nextPlayer.hand.push(drawnCard);
+    }
+  }
+
+  room.currentTurnIndex = nextPlayerIndex;
   console.log(`Turn changed to player ${room.currentTurnIndex} in room ${roomId}`);
+  
+  if (room.finalRoundActive && room.currentTurnIndex === room.queensPlayerIndex) {
+      const result = calculateFinalScore(roomId);
+      return { game_over: true, ...result };
+  }
+
   return { game_over: false };
 }
 
@@ -124,10 +142,10 @@ function calculateFinalScore(roomId) {
   }
 }
 
-
 app.post("/create_room", (req, res) => {
   try {
     const roomId = createRoom();
+    rooms[roomId].lastActivity = Date.now();
     res.json({
       status: "ok",
       room_id: roomId
@@ -183,10 +201,12 @@ app.post("/join", (req, res) => {
       hand: drawHand(room_id), 
       index: room.players.length,
       lastSeen: Date.now(),
-      score: 0 
+      score: 0,
+      initialSelectionComplete: false
     };
 
     room.players.push(newPlayer);
+    room.lastActivity = Date.now();
     console.log(`player ${newPlayer.index} joined room ${room_id}, total players: ${room.players.length}`);
 
     res.json({
@@ -246,7 +266,11 @@ app.post("/play_card", (req, res) => {
     if (room.reactionMode && card.value !== room.reactionValue) {
       if (!room.reactingPlayers.includes(player_index)) {
         room.reactingPlayers.push(player_index);
-        player.hand.push(room.deck.pop());
+        if (room.deck.length > 0) {
+            const penaltyCard = room.deck.pop();
+            player.hand.push(penaltyCard);
+            console.log(`Player ${player_index} received a penalty card.`);
+        }
         return res.json({
           status: "ok",
           hand: player.hand,
@@ -258,36 +282,56 @@ app.post("/play_card", (req, res) => {
       }
     }
 
-    player.hand.splice(cardIndex, 1); 
-    room.centerCard = card;
-    const turnResult = nextTurn(room_id); 
+    const playedCardData = { ...card };
+
+    player.hand.splice(cardIndex, 1);
+    
+    room.centerCard = null;
+    room.lastActivity = Date.now();
+
     let response = { 
       status: "ok", 
-      center_card: room.centerCard, 
-      current_turn_index: room.currentTurnIndex, 
-      total_players: room.players.length, 
-      hand: player.hand
+      center_card: room.centerCard,
+      current_turn_index: room.currentTurnIndex,
+      total_players: room.players.length,
     };
-  
-    if (card.rank === "13") { 
-      player.hand.forEach(c => c.permanent_face_up = true); 
-      response.message = "King played! Your cards are revealed.";
-    } else if (card.rank === "11") {
-      response.jack_swap_mode = true;
-      response.message = "Jack played! Select a card to swap.";
-    } else if (card.rank === "12") { 
-      const nextPlayerIndex = (player_index + 1) % room.players.length;
-      room.players[nextPlayerIndex].hand.push(card);
-      room.centerCard = null;
-      response.center_card = room.centerCard;
-    }
 
+    if (playedCardData.rank === "13") {
+      response.center_card = playedCardData;
+      response.king_reveal_mode = true;
+      response.king_player_index = player_index;
+      response.message = "King played! Choose one of your cards to reveal.";
+    } else if (playedCardData.rank === "11") {
+      response.center_card = playedCardData;
+      response.jack_swap_mode = true;
+      response.jack_player_index = player_index;
+      response.message = "Jack played! Select a card to swap.";
+      response.hand = player.hand;
+      return res.json(response);
+    } else if (playedCardData.rank === "12") {
+      const nextPlayerIndex = (player_index + 1) % room.players.length;
+      const nextPlayer = room.players[nextPlayerIndex];
+      nextPlayer.hand.push(playedCardData);
+      response.center_card = null;
+      response.message = "Queen played! It goes to the next player's hand.";
+    } else {
+        response.center_card = playedCardData;
+        room.reactionMode = true;
+        room.reactionValue = playedCardData.value;
+        room.reactingPlayers = [];
+        response.reaction_mode = true;
+        response.reaction_value = playedCardData.value;
+        response.message = `Reaction mode active! Play a ${playedCardData.value}.`;
+    }
+    
+    const turnResult = nextTurn(room_id);
     response.current_turn_index = room.currentTurnIndex;
     if (turnResult.game_over) {
-      response = { ...response, ...turnResult };
+        response = { ...response, ...turnResult };
     }
 
-    console.log("Card played in room", room_id, "new center card:", room.centerCard, "new turn index:", room.currentTurnIndex);
+    response.hand = player.hand;
+
     res.json(response);
 
   } catch (error) {
@@ -314,6 +358,10 @@ app.post("/jack_swap", (req, res) => {
 
     if (player_index !== room.currentTurnIndex) {
       return res.status(403).json({ status: "error", message: "Not your turn" });
+    }
+    
+    if (room.finalRoundActive && player_index === room.queensPlayerIndex) {
+        return res.status(400).json({ status: "error", message: "Cannot swap cards after calling Queens." });
     }
 
     const player = room.players[player_index];
@@ -365,15 +413,87 @@ app.post("/call_queens", (req, res) => {
     room.finalRoundActive = true;
     room.finalTurnCount = 0;
     nextTurn(room_id);
+    room.lastActivity = Date.now();
 
     res.json({
       status: "ok",
       message: "Queens called! Final round started.",
-      current_turn_index: room.currentTurnIndex
+      current_turn_index: room.currentTurnIndex,
+      queens_triggered: room.queensTriggered,
+      queens_player_index: room.queensPlayerIndex,
+      final_round_active: room.finalRoundActive
     });
   } catch (error) {
     console.error("Error in call_queens:", error);
     res.status(500).json({ status: "error", message: "Internal server error" });
+  }
+});
+
+app.post("/select_initial_cards", (req, res) => {
+  try {
+    const { room_id, player_index, selected_card_ids } = req.body;
+    
+    if (!rooms[room_id]) {
+      return res.status(404).json({
+        status: 'error',
+        message: 'Room not found'
+      });
+    }
+
+    const room = rooms[room_id];
+    const player = room.players.find(p => p.index === player_index);
+
+    if (!player) {
+      return res.status(404).json({
+        status: "error",
+        message: "Player not found"
+      });
+    }
+
+    if (!room.initialSelectionMode) {
+        return res.status(400).json({ status: "error", message: "Not in initial selection mode" });
+    }
+
+    if (selected_card_ids.length !== 2) {
+        return res.status(400).json({ status: "error", message: "Please select exactly 2 cards" });
+    }
+
+    let cards_flipped = 0;
+    for (const card_id of selected_card_ids) {
+        const card_in_hand = player.hand.find(c => c.card_id === card_id);
+        if (card_in_hand) {
+            card_in_hand.is_face_up = true;
+            cards_flipped++;
+        }
+    }
+
+    if (cards_flipped !== 2) {
+         return res.status(400).json({ status: "error", message: "Selected cards not found in hand" });
+    }
+
+    room.players[player_index].initialSelectionComplete = true; 
+    room.lastActivity = Date.now();
+
+    const all_selected = room.players.every(p => p.initialSelectionComplete);
+
+    if (all_selected) {
+        room.initialSelectionMode = false;
+        console.log("All players selected initial cards, starting game for room:", room_id);
+    }
+
+    res.json({
+      status: "ok",
+      message: "Initial cards selected",
+      hand: player.hand,
+      all_selected: all_selected
+    });
+
+  } catch (error) {
+    console.error('Error in select_initial_cards:', error);
+    res.status(500).json({
+      status: 'error',
+      message: error.message
+    });
   }
 });
 
@@ -403,7 +523,8 @@ app.get("/state", (req, res) => {
       reaction_mode: room.reactionMode,
       reaction_value: room.reactionValue,
       queens_triggered: room.queensTriggered,
-      final_round_active: room.finalRoundActive
+      final_round_active: room.finalRoundActive,
+      initial_selection_mode: room.initialSelectionMode
     });
     console.log("State sent to client for room", room_id, "- center card:", room.centerCard, "turn index:", room.currentTurnIndex);
   } catch (error) {
@@ -415,7 +536,6 @@ app.get("/state", (req, res) => {
   }
 });
 
-// Modified reset endpoint
 app.post("/reset", (req, res) => {
   const { room_id } = req.body;
   
@@ -453,6 +573,89 @@ app.get("/rooms", (req, res) => {
     });
   }
 });
+
+app.post('/king_reveal', (req, res) => {
+  try {
+    const { room_id, player_index, revealed_card_id } = req.body;
+    console.log(`Received /king_reveal request for room ${room_id}, player ${player_index}, card ${revealed_card_id}`);
+
+    const room = rooms[room_id];
+    if (!room) {
+      return res.status(404).json({ status: 'error', message: 'Room not found.' });
+    }
+
+    const player = room.players[player_index];
+    if (!player) {
+       return res.status(404).json({ status: 'error', message: 'Player not found.' });
+    }
+
+    let cardFound = false;
+    for (const card of player.hand) {
+      if (card.card_id === revealed_card_id) {
+        card.is_face_up = true;
+        cardFound = true;
+        console.log(`Server: Revealed card ${revealed_card_id} for player ${player_index}`);
+        break;
+      }
+    }
+
+    if (!cardFound) {
+      return res.status(404).json({ status: 'error', message: 'Revealed card not found in player' });
+    }
+
+    room.king_reveal_mode = false;
+    room.king_player_index = -1;
+
+    const playersData = room.players.map(p => ({
+        index: p.index,
+        hand_size: p.hand.length,
+        hand: p.hand.map(card => ({
+            ...card,
+            is_face_up: card.is_face_up
+        })),
+    }));
+
+    const response = {
+      status: "ok",
+      center_card: room.centerCard,
+      current_turn_index: room.currentTurnIndex,
+      total_players: room.players.length,
+      players: playersData,
+      king_reveal_mode: room.king_reveal_mode,
+      king_player_index: room.king_player_index,
+      message: `Player ${player_index + 1} revealed a card.`,
+      reaction_mode: room.reactionMode,
+      reaction_value: room.reactionValue,
+      jack_swap_mode: room.jack_swap_mode,
+      jack_player_index: room.jack_player_index,
+      queens_triggered: room.queensTriggered,
+      final_round_active: room.finalRoundActive,
+    };
+
+    res.json(response);
+
+  } catch (error) {
+    console.error('Error in king_reveal:', error);
+    res.status(500).json({ status: 'error', message: 'Internal server error.' });
+  }
+});
+
+function checkInactiveRooms() {
+  const now = Date.now();
+  const inactivityTimeout = 2 * 60 * 1000;
+  for (const roomId in rooms) {
+    const room = rooms[roomId];
+    if (now - room.lastActivity > inactivityTimeout) {
+      console.log(`Room ${roomId} is inactive, ending game and closing room.`);
+      const winningPlayerIndex = (room.currentTurnIndex + 1) % room.players.length;
+      const winnerMessage = `Game ended due to inactivity. Player ${winningPlayerIndex + 1} wins.`;
+      
+      delete rooms[roomId];
+      console.log(`Room ${roomId} closed.`);
+    }
+  }
+}
+setInterval(checkInactiveRooms, 30 * 1000);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {

@@ -4,6 +4,7 @@ var hand: Array = []
 var score: int = 0
 var player_id: int = -1
 
+const BASE_URL = "https://web-production-2342a.up.railway.app/"
 
 @onready var hand_container = $HandContainer
 
@@ -21,6 +22,11 @@ func add_card(card_instance: Node, face_up := false):
 	hand.append(card_instance)
 	card_instance.holding_player = self
 	card_instance.hand_index = hand.size() - 1
+	
+	# Check if card should be face up based on server data
+	if card_instance.card_data.has("is_face_up"):
+		face_up = card_instance.card_data["is_face_up"]
+	
 	card_instance.flip_card(face_up)
 	arrange_hand()
 

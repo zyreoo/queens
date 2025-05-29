@@ -1,7 +1,9 @@
-[gd_scene load_steps=4 format=3 uid="uid://hkxl6ha37deg"]
+[gd_scene load_steps=5 format=3 uid="uid://hkxl6ha37deg"]
 
 [ext_resource type="Script" uid="uid://50umvc1l6jn6" path="res://scripts/main.gd" id="1_pcy04"]
 [ext_resource type="Script" uid="uid://c0s7yy2xgo2kb" path="res://scripts/Player1.gd" id="2_0wfyh"]
+[ext_resource type="Script" uid="uid://dhh3l5cn32xai" path="res://scripts/card.gd" id="3_ppukc"]
+[ext_resource type="Script" uid="uid://b8yvnq6y7khr7" path="res://scripts/effects.gd" id="4_effects"]
 
 [sub_resource type="GDScript" id="GDScript_o5qli"]
 script/source = "extends Node
@@ -127,5 +129,8 @@ script = SubResource("GDScript_o5qli")
 
 [node name="CenterCardSlot" type="Node2D" parent="."]
 position = Vector2(949, 452)
+
+[node name="Effects" type="Node" parent="."]
+script = ExtResource("4_effects")
 
 [connection signal="item_selected" from="RoomManagement/RoomList" to="." method="_on_room_selected"]

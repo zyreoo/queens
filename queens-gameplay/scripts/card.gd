@@ -12,8 +12,15 @@ var hand_index: int = -1
 var is_center_card := false
 var room_id := ""
 
+const BASE_URL = "https://web-production-2342a.up.railway.app/"
+
+@onready var effects = get_node("/root/Main/Effects")
+var original_position: Vector2
+var drag_start_position: Vector2
+
 func _ready():
-	start_position = position
+	effects.add_button_effects(self)
+	original_position = position
 	mouse_filter = Control.MOUSE_FILTER_PASS
 	
 func set_data(data: Dictionary):
@@ -21,12 +28,8 @@ func set_data(data: Dictionary):
 	rank = data["rank"]
 	value = data["value"]
 	card_data = data
-	var image_path = "res://assets/%s_%s.png" % [suit, rank]
-	texture_normal = load(image_path)
-	if not texture_normal:
-		print("Failed to load card image: ", image_path)
-		texture_normal = load("res://assets/default_card.png")
-		
+	# The initial flip will be handled by update_player_hand based on is_face_up from server
+	
 func flip_card(face_up: bool):
 	if face_up:
 		var image_path = "res://assets/%s_%s.png" % [suit, rank]
@@ -43,39 +46,32 @@ func flip_card(face_up: bool):
 			print("Failed to load card back image: res://assets/card_back_3.png")
 			texture_normal = load("res://assets/default_card.png")
 	visible = true
-	print("Card visibility set to true for: ", suit, " ", rank)
+	# print("Card visibility set to true for: ", suit, " ", rank) # Reduced logging
 			
-func _gui_input(event):
-	if is_center_card:
-		return
-		
-	var main = get_node_or_null("/root/Main")
-	if not main or (main.player_index != main.current_turn_index and not main.reaction_mode):
-		return
-		
-	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
-		if event.pressed:
-			dragging = true
-			drag_offset = get_global_mouse_position() - global_position
-			if get_parent():
-				get_parent().remove_child(self)
-			main.add_child(self)
-		else:
-			dragging = false
-			var center = get_node_or_null("/root/Main/CenterCardSlot")
-			
-			if center and global_position.distance_to(center.global_position) < 350:
-				main._on_card_pressed(card_data)
+func _input_event(_viewport, event, _shape_idx):
+	if event is InputEventMouseButton:
+		if event.button_index == MOUSE_BUTTON_LEFT:
+			if event.pressed:
+				start_drag()
 			else:
-				if holding_player:
-					if get_parent():
-						get_parent().remove_child(self)
-					holding_player.add_child(self)
-					position = Vector2.ZERO
-					holding_player.arrange_hand()
-					if not get_rect().has_point(get_local_mouse_position()):
-						dragging = false          
-						
+				end_drag()
+
+func start_drag():
+	dragging = true
+	drag_start_position = position
+	effects.play_card_played_effect(self)
+
+func end_drag():
+	dragging = false
+	if position.distance_to(get_node("/root/Main/CenterCardSlot").position) < 100:
+		play_card()
+	else:
+		effects.animate_card_move(self, original_position)
+
+func play_card():
+	effects.animate_card_move(self, get_node("/root/Main/CenterCardSlot").position)
+	# ... rest of play card logic ...
+
 func _process(_delta):
-	if dragging and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
-		global_position = get_global_mouse_position() - drag_offset
+	if dragging:
+		position = get_global_mouse_position()
