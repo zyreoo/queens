@@ -124,7 +124,7 @@ function calculateFinalScore(roomId) {
   }
 }
 
-// New endpoint to create a room
+
 app.post("/create_room", (req, res) => {
   try {
     const roomId = createRoom();
@@ -141,7 +141,6 @@ app.post("/create_room", (req, res) => {
   }
 });
 
-// Modified join endpoint to include room_id
 app.post("/join", (req, res) => {
   try {
     const { room_id, player_id } = req.body;
@@ -210,7 +209,6 @@ app.post("/join", (req, res) => {
   }
 });
 
-// Modified play_card endpoint
 app.post("/play_card", (req, res) => {
   try {
     const { room_id, player_index, card } = req.body;
@@ -301,7 +299,6 @@ app.post("/play_card", (req, res) => {
   }
 });
 
-// Modified jack_swap endpoint
 app.post("/jack_swap", (req, res) => {
   try {
     const { room_id, player_index, from_card_id, to_card_id } = req.body;
@@ -346,7 +343,6 @@ app.post("/jack_swap", (req, res) => {
   }
 });
 
-// Modified call_queens endpoint
 app.post("/call_queens", (req, res) => {
   try {
     const { room_id, player_index } = req.body;
@@ -381,7 +377,6 @@ app.post("/call_queens", (req, res) => {
   }
 });
 
-// Modified state endpoint
 app.get("/state", (req, res) => {
   try {
     const { room_id } = req.query;
@@ -438,7 +433,6 @@ app.post("/reset", (req, res) => {
   });
 });
 
-// New endpoint to list all rooms
 app.get("/rooms", (req, res) => {
   try {
     const roomList = Object.entries(rooms).map(([id, room]) => ({
