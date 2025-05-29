@@ -10,6 +10,7 @@ var start_position := Vector2()
 var holding_player: Node = null
 var hand_index: int = -1
 var is_center_card := false
+var room_id := ""
 
 func _ready():
 	start_position = position
@@ -22,20 +23,28 @@ func set_data(data: Dictionary):
 	card_data = data
 	var image_path = "res://assets/%s_%s.png" % [suit, rank]
 	texture_normal = load(image_path)
-	
-	
+	if not texture_normal:
+		print("Failed to load card image: ", image_path)
+		texture_normal = load("res://assets/default_card.png")
+		
 func flip_card(face_up: bool):
 	if face_up:
 		var image_path = "res://assets/%s_%s.png" % [suit, rank]
 		texture_normal = load(image_path)
+		if not texture_normal:
+			print("Failed to load card image: ", image_path)
+			texture_normal = load("res://assets/default_card.png")
+		else:
+			print("Loaded card image: ", image_path)
+			
 	else: 
 		texture_normal = load("res://assets/card_back_3.png")
-	if not texture_normal:
-		print("Failed to load card back image: res://assets/card_back_3.png")
-		texture_normal = load("res://assets/default_card.png")
-		visible = true
-		
-		
+		if not texture_normal:
+			print("Failed to load card back image: res://assets/card_back_3.png")
+			texture_normal = load("res://assets/default_card.png")
+	visible = true
+	print("Card visibility set to true for: ", suit, " ", rank)
+			
 func _gui_input(event):
 	if is_center_card:
 		return
@@ -54,6 +63,7 @@ func _gui_input(event):
 		else:
 			dragging = false
 			var center = get_node_or_null("/root/Main/CenterCardSlot")
+			
 			if center and global_position.distance_to(center.global_position) < 350:
 				main._on_card_pressed(card_data)
 			else:

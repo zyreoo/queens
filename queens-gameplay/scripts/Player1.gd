@@ -39,6 +39,7 @@ func arrange_hand():
 			card.position.x -= global_card_pos.x 
 		elif global_card_pos.x + card.size.x > screen_size.x:
 			card.position.x -= (global_card_pos.x + card.size.x - screen_size.x)
+		print("Arranged card ", i, " at position: ", card.position, " visible: ", card.visible)
 			
 		
 func clear_hand():

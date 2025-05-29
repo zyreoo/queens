@@ -16,6 +16,10 @@ config/features=PackedStringArray("4.4", "Forward Plus")
 config/icon="res://wakatime/icon.svg"
 config/player_id="720b8687-dbb0-4a12-b69a-2d41bf50f4be"
 
+[autoload]
+
+RoomState="*res://RoomState.gd"
+
 [display]
 
 window/size/viewport_width=1920

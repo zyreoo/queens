@@ -29,8 +29,36 @@ func _on_request_completed(result: int, response_code: int, headers: PackedStrin
 position = Vector2(-1, 1)
 script = ExtResource("1_pcy04")
 
-[node name="CenterCardSlot" type="Node2D" parent="."]
-position = Vector2(949, 452)
+[node name="RoomManagement" type="Control" parent="."]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="CreateRoomButton" type="Button" parent="RoomManagement"]
+layout_mode = 1
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = 494.0
+offset_top = 105.0
+offset_right = 674.0
+offset_bottom = 136.0
+grow_horizontal = 0
+text = "Create Room"
+
+[node name="RoomList" type="ItemList" parent="RoomManagement"]
+layout_mode = 1
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = 514.0
+offset_top = 172.0
+offset_right = 694.0
+offset_bottom = 203.0
+grow_horizontal = 0
 
 [node name="StartGameButton" type="Button" parent="."]
 offset_left = 322.0
@@ -97,5 +125,7 @@ offset_bottom = 102.0
 [node name="Multiplayer" type="Node2D" parent="."]
 script = SubResource("GDScript_o5qli")
 
-[connection signal="pressed" from="StartGameButton" to="." method="_on_start_game"]
-[connection signal="pressed" from="queens_button" to="." method="_on_queens_button_pressed"]
+[node name="CenterCardSlot" type="Node2D" parent="."]
+position = Vector2(949, 452)
+
+[connection signal="item_selected" from="RoomManagement/RoomList" to="." method="_on_room_selected"]
