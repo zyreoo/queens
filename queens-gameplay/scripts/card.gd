@@ -54,13 +54,17 @@ func _input_event(_viewport, event, _shape_idx):
 		print("Error: Main script not found in card.gd")
 		return
 
+	print("Card input event received: ", event)
+
 	if event is InputEventMouseButton:
+		print("Mouse button event: ", event.button_index, ", pressed: ", event.pressed)
 		if event.button_index == MOUSE_BUTTON_LEFT:
 			if event.pressed:
 				drag_start_position = global_position
 				
 				var should_trigger_click_action = false
-				if main_script.initial_selection_mode and main_script.player_index == main_script.current_turn_index:
+				print("Initial selection mode: ", main_script.initial_selection_mode, ", Holding player: ", holding_player, ", Current player node: ", main_script.get_node("Player%d" % main_script.player_index))
+				if main_script.initial_selection_mode and is_instance_valid(holding_player) and holding_player == main_script.get_node("Player%d" % main_script.player_index):
 					should_trigger_click_action = true
 			elif main_script.king_reveal_mode and main_script.player_index == main_script.king_player_index:
 				should_trigger_click_action = true
@@ -76,14 +80,15 @@ func _input_event(_viewport, event, _shape_idx):
 				var is_click = drag_distance < 10
 				
 				var should_trigger_click_action = false
-				if main_script.initial_selection_mode and main_script.player_index == main_script.current_turn_index:
+				if main_script.initial_selection_mode and is_instance_valid(holding_player) and holding_player == main_script.get_node("Player%d" % main_script.player_index):
 					should_trigger_click_action = true
-				elif main_script.king_reveal_mode and main_script.player_index == main_script.king_player_index:
-					should_trigger_click_action = true
-				elif main_script.jack_swap_mode and main_script.player_index == main_script.jack_player_index:
+			elif main_script.king_reveal_mode and main_script.player_index == main_script.king_player_index:
+				should_trigger_click_action = true
+			elif main_script.jack_swap_mode and main_script.player_index == main_script.jack_player_index:
 						should_trigger_click_action = true
 
 				if should_trigger_click_action and is_click:
+					print("Click action triggered!")
 					main_script._on_card_pressed(card_data)
 					dragging = false
 				else:
@@ -91,7 +96,20 @@ func _input_event(_viewport, event, _shape_idx):
 					
 func start_drag():
 	var main_script = get_node("/root/Main")
-	if !main_script or main_script.initial_selection_mode or main_script.king_reveal_mode or main_script.jack_swap_mode:
+	if !main_script:
+		dragging = false
+		return
+
+	var should_prevent_drag = false
+	print("Initial selection mode for drag check: ", main_script.initial_selection_mode, ", Holding player for drag check: ", is_instance_valid(holding_player), ", Current player node for drag check: ", is_instance_valid(main_script.get_node_or_null("Player%d" % main_script.player_index)), ", Match: ", is_instance_valid(holding_player) and is_instance_valid(main_script.get_node_or_null("Player%d" % main_script.player_index)) and holding_player == main_script.get_node("Player%d" % main_script.player_index))
+	if main_script.initial_selection_mode and is_instance_valid(holding_player) and holding_player == main_script.get_node("Player%d" % main_script.player_index):
+		should_prevent_drag = true
+	elif main_script.king_reveal_mode and main_script.player_index == main_script.king_player_index:
+		should_prevent_drag = true
+	elif main_script.jack_swap_mode and main_script.player_index == main_script.jack_player_index:
+		should_prevent_drag = true
+
+	if should_prevent_drag:
 		dragging = false
 		return
 
@@ -104,11 +122,25 @@ func end_drag():
 		return
 	dragging = false
 
-	if position.distance_to(get_node("/root/Main/CenterCardSlot").position) < 100:
+	# Check game mode to ensure play_card is only called in normal gameplay
+	var main_script = get_node("/root/Main")
+	if !main_script:
+		print("Error: Main script not found in card.gd on end_drag")
+		return
+
+	var can_play_card = false
+	print("Initial selection mode for play check: ", main_script.initial_selection_mode, ", King reveal mode for play check: ", main_script.king_reveal_mode, ", Jack swap mode for play check: ", main_script.jack_swap_mode, ", Reaction mode for play check: ", main_script.reaction_mode, ", Final round active for play check: ", main_script.final_round_active, ", Player index: ", main_script.player_index, ", Current turn index: ", main_script.current_turn_index, ", Match: ", main_script.player_index == main_script.current_turn_index)
+	if !main_script.initial_selection_mode and !main_script.king_reveal_mode and !main_script.jack_swap_mode and !main_script.reaction_mode and !main_script.final_round_active and main_script.player_index == main_script.current_turn_index:
+		if position.distance_to(get_node("/root/Main/CenterCardSlot").position) < 100:
+			can_play_card = true
+
+	if can_play_card:
+		print("Playing card via drag.")
 		play_card()
 	else:
+		print("Not playing card via drag. Animating back.")
 		effects.animate_card_move(self, original_position)
-		dragging = false
+	dragging = false
 
 func play_card():
 	effects.animate_card_move(self, get_node("/root/Main/CenterCardSlot").position)

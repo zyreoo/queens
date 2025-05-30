@@ -79,8 +79,12 @@ func get_room_management_nodes():
 		# Connect signals for these buttons here after getting references
 		if create_room_button:
 			create_room_button.pressed.connect(_on_create_room_pressed)
-		if join_button:
-			join_button.pressed.connect(_on_join_pressed)
+			if has_joined and total_players == MAX_PLAYERS:
+				create_room_button.hide()
+			if join_button:
+				join_button.pressed.connect(_on_join_pressed)
+				if has_joined and total_players == MAX_PLAYERS:
+					join_button.hide()
 
 func add_button_effects_deferred():
 	# Add effects to buttons - now also check if buttons are valid
