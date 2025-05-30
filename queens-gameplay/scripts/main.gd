@@ -280,7 +280,7 @@ func _on_request_completed(_result, response_code, _headers, body):
 						jack_player_index = -1
 				
 			if !king_reveal_mode and !jack_swap_mode:
-					message_label.text = "Your turn!" if player_index == current_turn_index else "Waiting for player %d" % (current_turn_index + 1)
+				message_label.text = "Your turn!" if player_index == current_turn_index else "Waiting for player %d" % (current_turn_index + 1)
 		
 				if json.has("reaction_mode"):
 					reaction_mode = json["reaction_mode"]
