@@ -32,6 +32,7 @@ func set_data(data: Dictionary):
 	card_data = data
 	
 func flip_card(face_up: bool):
+	print("flip_card called with face_up: ", face_up)
 	if face_up:
 		var image_path = "res://assets/%s_%s.png" % [suit, rank]
 		texture_normal = load(image_path)
@@ -82,10 +83,10 @@ func _input_event(_viewport, event, _shape_idx):
 				var should_trigger_click_action = false
 				if main_script.initial_selection_mode and is_instance_valid(holding_player) and holding_player == main_script.get_node("Player%d" % main_script.player_index):
 					should_trigger_click_action = true
-			elif main_script.king_reveal_mode and main_script.player_index == main_script.king_player_index:
-				should_trigger_click_action = true
-			elif main_script.jack_swap_mode and main_script.player_index == main_script.jack_player_index:
-						should_trigger_click_action = true
+				elif main_script.king_reveal_mode and main_script.player_index == main_script.king_player_index:
+					should_trigger_click_action = true
+				elif main_script.jack_swap_mode and main_script.player_index == main_script.jack_player_index:
+							should_trigger_click_action = true
 
 				if should_trigger_click_action and is_click:
 					print("Click action triggered!")
