@@ -600,8 +600,8 @@ func _on_initial_card_reveal_timeout(card_id: String):
 	if initial_selection_mode:
 		var player_node = get_node("Player%d" % player_index)
 		var card_instance = null
-		for card in player_node.get_children():
-			if card is Node and card.has_method("set_data") and card.card_data.card_id == card_id:
+		for card in player_node.hand:
+			if card.card_data.card_id == card_id:
 				card_instance = card
 				break
 
@@ -610,6 +610,7 @@ func _on_initial_card_reveal_timeout(card_id: String):
 			return
 
 		selected_initial_cards.append(card_instance.card_data)
+		card_instance.flip_card(false)
 
 		var timer_path = card_instance.get_meta("revealing_timer")
 		if timer_path:
@@ -622,6 +623,10 @@ func _on_initial_card_reveal_timeout(card_id: String):
 
 		if selected_initial_cards.size() == 2:
 			message_label.text = "Two cards selected. Sending to server..."
+			
+			# Disable all cards for this player
+			for card in player_node.hand:
+				card.disabled = true
 
 			last_request_type = "select_initial_cards"
 			var url = BASE_URL + "select_initial_cards"
@@ -644,8 +649,8 @@ func _on_initial_card_reveal_timeout(card_id: String):
 			else:
 				print("Initial card selection sent: ", payload)
 				message_label.text = "Waiting for other players..."
-
-		
+		else:
+			message_label.text = "Select %d more card(s)." % [2 - selected_initial_cards.size()]
 
 	else:
 		print("Timeout occurred outside of initial selection mode.")
