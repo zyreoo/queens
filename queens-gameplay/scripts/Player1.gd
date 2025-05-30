@@ -23,7 +23,6 @@ func add_card(card_instance: Node, face_up := false):
 	card_instance.holding_player = self
 	card_instance.hand_index = hand.size() - 1
 	
-	# Check if card should be face up based on server data
 	if card_instance.card_data.has("is_face_up"):
 		face_up = card_instance.card_data["is_face_up"]
 	

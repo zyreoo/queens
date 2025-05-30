@@ -11,16 +11,19 @@ var selected_room_id := ""
 const BASE_URL = "https://web-production-2342a.up.railway.app/"
 
 func _ready():
-	# Add effects to buttons
-	effects.add_button_effects(refresh_button)
-	effects.add_button_effects(join_button)
+	call_deferred("add_button_effects_deferred")
 	
-	# Connect signals
 	refresh_button.pressed.connect(_on_refresh_pressed)
 	join_button.pressed.connect(_on_join_pressed)
 	room_list.item_selected.connect(_on_room_selected)
 	
 	refresh_rooms()
+
+func add_button_effects_deferred():
+	if refresh_button:
+		effects.add_button_effects(refresh_button)
+	if join_button:
+		effects.add_button_effects(join_button)
 
 func refresh_rooms():
 	effects.animate_text_fade(message_label, "Refreshing rooms...")

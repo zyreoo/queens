@@ -2,8 +2,7 @@
 
 [ext_resource type="Script" uid="uid://50umvc1l6jn6" path="res://scripts/main.gd" id="1_pcy04"]
 [ext_resource type="Script" uid="uid://c0s7yy2xgo2kb" path="res://scripts/Player1.gd" id="2_0wfyh"]
-[ext_resource type="Script" uid="uid://dhh3l5cn32xai" path="res://scripts/card.gd" id="3_ppukc"]
-[ext_resource type="Script" uid="uid://b8yvnq6y7khr7" path="res://scripts/effects.gd" id="4_effects"]
+[ext_resource type="Script" uid="uid://dbupxig40egti" path="res://scripts/effects.gd" id="4_effects"]
 
 [sub_resource type="GDScript" id="GDScript_o5qli"]
 script/source = "extends Node

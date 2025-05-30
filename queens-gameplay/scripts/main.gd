@@ -5,10 +5,13 @@ extends Node2D
 @onready var message_label := $MessageLabel
 @onready var start_button := $StartGameButton
 @onready var queens_button := $queens_button
-@onready var create_room_button := $RoomManagement/CreateRoomButton
 @onready var room_list := $RoomManagement/RoomList
 @onready var center_card_slot := $CenterCardSlot
-@onready var join_button := $RoomManagement/JoinButton
+
+# Use separate variables for RoomManagement children and get them safely
+var room_management_node: Control = null
+var create_room_button: Button = null
+var join_button: Button = null
 
 var player_id := ""
 var room_id := ""
@@ -35,6 +38,7 @@ var king_reveal_mode := false
 var king_player_index := -1
 var jack_player_index := -1
 var queens_player_index := -1
+var MAX_PLAYERS = 2
 
 
 const BASE_URL = "https://web-production-2342a.up.railway.app/"
@@ -57,18 +61,37 @@ func _ready():
 	start_button.pressed.connect(_on_start_game_pressed)
 	if queens_button:
 		queens_button.pressed.connect(_on_queens_pressed)
-	if create_room_button:
-		create_room_button.pressed.connect(_on_create_room_pressed)
-	if join_button:
-		join_button.pressed.connect(_on_join_pressed)
 	
 	refresh_room_list()
-	
-	# Add effects to buttons
-	effects.add_button_effects(start_button)
-	effects.add_button_effects(queens_button)
-	effects.add_button_effects(create_room_button)
-	effects.add_button_effects(join_button)
+
+	# Get references to RoomManagement nodes after they are ready
+	call_deferred("get_room_management_nodes")
+
+	# Add effects to buttons (deferred)
+	call_deferred("add_button_effects_deferred")
+
+func get_room_management_nodes():
+	room_management_node = get_node_or_null("RoomManagement")
+	if room_management_node:
+		create_room_button = room_management_node.get_node_or_null("CreateRoomButton")
+		join_button = room_management_node.get_node_or_null("JoinButton")
+
+		# Connect signals for these buttons here after getting references
+		if create_room_button:
+			create_room_button.pressed.connect(_on_create_room_pressed)
+		if join_button:
+			join_button.pressed.connect(_on_join_pressed)
+
+func add_button_effects_deferred():
+	# Add effects to buttons - now also check if buttons are valid
+	if start_button:
+		effects.add_button_effects(start_button)
+	if queens_button:
+		effects.add_button_effects(queens_button)
+	if create_room_button:
+		effects.add_button_effects(create_room_button)
+	if join_button:
+		effects.add_button_effects(join_button)
 
 func _on_create_room_pressed():
 	effects.animate_text_fade(message_label, "Creating room...")
@@ -200,7 +223,11 @@ func _on_request_completed(_result, response_code, _headers, body):
 					var player_node = get_node("Player%d" % player_index)
 					for card in player_node.hand:
 						card.disabled = true
-			
+						
+			if total_players == MAX_PLAYERS:
+				create_room_button.hide()
+				join_button.hide()
+		
 		"play_card":
 			if json.has("hand"):
 				hand = json["hand"]
@@ -250,7 +277,7 @@ func _on_request_completed(_result, response_code, _headers, body):
 					if jack_player_index != -1:
 						for i in range(total_players):
 							var player_node = get_node("Player%d" % i)
-							update_player_hand(i, [])
+							update_player_hand(i, player_node.hand.map(func(card): return card.card_data))
 						jack_player_index = -1
 				
 			if !king_reveal_mode and !jack_swap_mode:
@@ -353,8 +380,7 @@ func update_player_hand(for_player_index: int, hand_data: Array):
 		print("Player node not found for index: ", for_player_index)
 		return
 
-	var is_initial_deal = (for_player_index == player_index and hand_data.size() == 4 and player_node.hand.size() == 0)
-
+	var old_hand_card_ids = player_node.hand.map(func(card): return card.card_data.card_id)
 	player_node.clear_hand()
 
 	for i in range(hand_data.size()):
@@ -366,48 +392,85 @@ func update_player_hand(for_player_index: int, hand_data: Array):
 
 		var should_be_clickable = false
 		if for_player_index == player_index:
+			# It's the current player's hand
 			if initial_selection_mode:
+				# In initial selection mode, all of player's cards are clickable
 				should_be_clickable = true
-			elif current_turn_index == player_index and not reaction_mode and not jack_swap_mode and not king_reveal_mode:
+			elif king_reveal_mode and king_player_index == player_index:
+				# If current player is the King player, their cards are clickable for reveal
 				should_be_clickable = true
-			elif reaction_mode and player_node.hand.has(card) and card_data.get("value") == reaction_value:
+			elif jack_swap_mode and jack_player_index == player_index:
+				# If current player is the Jack player, their cards are clickable for swap
 				should_be_clickable = true
-			elif jack_swap_mode:
+			elif current_turn_index == player_index and not reaction_mode and not king_reveal_mode and not jack_swap_mode and not final_round_active:
+				# In normal turn, current player's cards are clickable if not in special modes
+				should_be_clickable = true
+			elif reaction_mode and current_turn_index == player_index and card_data.get("value") == reaction_value:
+				# In reaction mode, current player's cards matching reaction value are clickable
 				should_be_clickable = true
 				
+			# During the final round for the Queens caller, cards are not clickable for playing
 			if final_round_active and player_index == queens_player_index:
 				should_be_clickable = false
-				
+
 			card.disabled = not should_be_clickable
 			card.mouse_filter = Control.MOUSE_FILTER_PASS if should_be_clickable else Control.MOUSE_FILTER_IGNORE
-			
+
+			# Connect pressed signal only if clickable and not already connected
 			if should_be_clickable:
 				if !card.pressed.is_connected(func(): _on_card_pressed(card_data)):
 					var connection_result = card.pressed.connect(func(): _on_card_pressed(card_data))
 					if connection_result != OK:
 						print("Failed to connect pressed signal for card: ", card_data)
 			else:
+				# Disconnect if not clickable and connected
 				if card.pressed.is_connected(func(): _on_card_pressed(card_data)):
 					card.pressed.disconnect(func(): _on_card_pressed(card_data))
 
+			# Timed reveal for newly received cards
+			var is_new_card = !old_hand_card_ids.has(card_data.card_id)
+			if is_new_card and !card_data.get("is_face_up", false):
+				# Flip face up temporarily and start timer
+				card.flip_card(true)
+				
+				# Ensure card is valid and in scene tree before adding timer
+				if is_instance_valid(card) and card.is_inside_tree():
+					var reveal_timer = Timer.new()
+					card.add_child(reveal_timer) # Attach timer to the card
+					reveal_timer.wait_time = 2.5 # 2.5 seconds reveal time
+					reveal_timer.one_shot = true
+					reveal_timer.timeout.connect(func(): card.flip_card(false)) # Flip back face down after timer
+					reveal_timer.start()
+				else:
+					print("Error: Cannot add reveal timer. Card is not valid or not in scene tree.")
+
 		else:
-			card.disabled = true
+			# It's another player's hand
+			card.disabled = true # Other players' cards are generally not clickable for interaction
 			card.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			if !card_data.get("permanent_face_up", false):
+
+			# Determine if other players' cards should be face up
+			if card_data.get("permanent_face_up", false) or (king_reveal_mode and for_player_index == king_player_index and card_data.get("is_face_up", false)):
+				face_up = true
+			else:
 				face_up = false
 			
-			if king_reveal_mode and for_player_index == king_player_index and !card_data.get("is_face_up", false):
+			# Allow clicking on opponent's cards for Jack swap or King reveal if in those modes
+			if (jack_swap_mode and player_index == jack_player_index) or (king_reveal_mode and player_index == king_player_index): # Should only be clickable by the active Jack/King player
 				should_be_clickable = true
 				card.disabled = false
 				card.mouse_filter = Control.MOUSE_FILTER_PASS
-				if !card.pressed.is_connected(func(): _on_card_pressed(card_data)):
-					var connection_result = card.pressed.connect(func(): _on_card_pressed(card_data))
-					if connection_result != OK:
-						print("Failed to connect pressed signal for card: ", card_data)
-			else:
-				if card.pressed.is_connected(func(): _on_card_pressed(card_data)):
-					card.pressed.disconnect(func(): _on_card_pressed(card_data))
-					
+				
+				if should_be_clickable:
+					if !card.pressed.is_connected(func(): _on_card_pressed(card_data)):
+						var connection_result = card.pressed.connect(func(): _on_card_pressed(card_data))
+						if connection_result != OK:
+							print("Failed to connect pressed signal for card: ", card_data)
+				else:
+					if card.pressed.is_connected(func(): _on_card_pressed(card_data)):
+						card.pressed.disconnect(func(): _on_card_pressed(card_data))
+
+
 		card.flip_card(face_up)
 		player_node.add_card(card, for_player_index == player_index)
 	player_node.arrange_hand()
@@ -415,61 +478,58 @@ func update_player_hand(for_player_index: int, hand_data: Array):
 
 func _on_card_pressed(card_data: Dictionary):
 	print("Card pressed: ", card_data)
-	
+
 	if initial_selection_mode:
 		var player_node = get_node("Player%d" % player_index)
-		if !player_node.hand.has(card_data):
-			print("Clicked card not in current player's hand.")
-			return
-		
 		var card_instance = null
+		# Find the card instance in the player's hand
 		for card in player_node.get_children():
-			if card is Node and card.card_data.card_id == card_data.card_id:
+			if card is Node and card.has_method("set_data") and card.card_data.card_id == card_data.card_id:
 				card_instance = card
 				break
-		if !card_instance:
-			print("Card instance not found in scene tree.")
-			return
-		
-		if selected_initial_cards.size() < 2:
-			var already_selected = false
-			for selected_card in selected_initial_cards:
-				if selected_card.card_id == card_data.card_id:
-					already_selected = true
-					break
-			
-			if !already_selected:
-				selected_initial_cards.append(card_data)
-				card_instance.flip_card(true)
-				card_instance.disabled = true
-				message_label.text = "Selected %d cards. Select %d more." % [selected_initial_cards.size(), 2 - selected_initial_cards.size()]
-				
-			if selected_initial_cards.size() == 2:
-				last_request_type = "select_initial_cards"
-				var url = BASE_URL + "select_initial_cards"
-				var headers = ["Content-Type: application/json"]
-				var selected_ids = []
-				for card in selected_initial_cards:
-					selected_ids.append(card.card_id)
-				var payload = {
-					"room_id": room_id,
-					"player_index": player_index,
-					"selected_card_ids": selected_ids
-				}
-				
-				poll_timer.stop()
-				awaiting_play_card_response = true
 
-				var error = http.request(url, headers, HTTPClient.METHOD_POST, JSON.stringify(payload))
-				if error != OK:
-					message_label.text = "Failed to send initial card selection"
-					awaiting_play_card_response = false
-					poll_timer.start()
-				else:
-					print("Initial card selection sent: ", payload)
-					message_label.text = "Waiting for other players..."
-		return
-	
+		if !card_instance:
+			print("Card instance not found in scene tree for initial selection.")
+			return
+
+		# Check if card is already selected or revealing
+		var already_selected = false
+		for selected_card in selected_initial_cards:
+			if selected_card.card_id == card_data.card_id:
+				already_selected = true
+				break
+
+		if already_selected:
+			print("Card already selected for initial reveal.")
+			return
+
+		if card_instance.has_meta("revealing_timer"):
+			print("Card is already revealing.")
+			return
+
+		# Check if we are already revealing 2 cards
+		var revealing_count = 0
+		for card in player_node.get_children():
+			if card.has_meta("revealing_timer"):
+				revealing_count += 1
+
+		if selected_initial_cards.size() + revealing_count < 2:
+			# Flip card and start timer
+			card_instance.flip_card(true)
+			card_instance.disabled = true # Disable clicks while revealing
+
+			var reveal_timer = Timer.new()
+			player_node.add_child(reveal_timer) # Add timer to player node
+			reveal_timer.wait_time = 3.0
+			reveal_timer.one_shot = true
+			reveal_timer.timeout.connect(func(): _on_initial_card_reveal_timeout(card_data.card_id))
+			reveal_timer.start()
+			card_instance.set_meta("revealing_timer", reveal_timer.get_path()) # Store timer path
+
+			message_label.text = "Revealing card... Select %d more." % [2 - (selected_initial_cards.size() + revealing_count + 1)]
+
+		return # Don't proceed with play_card logic in initial selection mode
+
 	if jack_swap_mode and jack_player_index == player_index:
 		var player_node = get_node("Player%d" % player_index)
 		var opponent_node = get_node("Player%d" % ((player_index + 1) % total_players))
@@ -597,3 +657,101 @@ func _on_join_pressed():
 func update_message(text: String, is_error: bool = false):
 	message_label.modulate = Color(1, 0, 0) if is_error else Color(1, 1, 1)
 	effects.animate_text_pop(message_label, text)
+
+func _on_initial_card_reveal_timeout(card_id: String):
+	print("Initial card reveal timeout for card: ", card_id)
+
+	if initial_selection_mode:
+		var player_node = get_node("Player%d" % player_index)
+		var card_instance = null
+		# Find the card instance in the player's hand
+		for card in player_node.get_children():
+			if card is Node and card.has_method("set_data") and card.card_data.card_id == card_id:
+				card_instance = card
+				break
+
+		if !card_instance:
+			print("Card instance not found after timer.")
+			return
+
+		# Card has been revealed for 3 seconds, add to selected list
+		selected_initial_cards.append(card_instance.card_data)
+
+		# Clean up the timer
+		var timer_path = card_instance.get_meta("revealing_timer")
+		if timer_path:
+			var timer_node = get_node(timer_path)
+			if timer_node:
+				timer_node.queue_free()
+			card_instance.remove_meta("revealing_timer")
+
+		print("Selected initial cards count: ", selected_initial_cards.size())
+
+		# Check if two cards have been selected
+		if selected_initial_cards.size() == 2:
+			message_label.text = "Two cards selected. Sending to server..."
+			# Keep cards face up after selection based on current logic
+
+			# Send selected cards to server
+			last_request_type = "select_initial_cards"
+			var url = BASE_URL + "select_initial_cards"
+			var headers = ["Content-Type: application/json"]
+			var selected_ids = []
+			for card in selected_initial_cards:
+				selected_ids.append(card.card_id)
+			var payload = {
+				"room_id": room_id,
+				"player_index": player_index,
+				"selected_card_ids": selected_ids
+			}
+			poll_timer.stop() # Stop polling while waiting for server response
+			awaiting_play_card_response = true # Use this flag to prevent further polling
+			var error = http.request(url, headers, HTTPClient.METHOD_POST, JSON.stringify(payload))
+			if error != OK:
+				message_label.text = "Failed to send initial card selection"
+				awaiting_play_card_response = false
+				poll_timer.start()
+			else:
+				print("Initial card selection sent: ", payload)
+				message_label.text = "Waiting for other players..."
+
+		# The cards remain face up after being selected according to the current logic.
+		# If they should flip back face down, uncomment the following line:
+		# card_instance.flip_card(false)
+
+
+	else:
+		# This case should not happen if initial_selection_mode is handled correctly
+		print("Timeout occurred outside of initial selection mode.")
+
+func _on_card_played(card_data: Dictionary):
+	print("Card played via drag: ", card_data)
+	
+	# This function is called from card.gd when a card is dragged to the center
+	# Send the played card data to the server
+	
+	if player_index != current_turn_index:
+		print("Not your turn! Cannot play card via drag.")
+		message_label.text = "Not your turn!"
+		# Optionally, animate the card back to hand if played out of turn
+		return
+	
+	last_request_type = "play_card"
+	var url = BASE_URL + "play_card"
+	var headers = ["Content-Type: application/json"]
+	var payload = {
+		"room_id": room_id,
+		"player_index": player_index,
+		"card": card_data
+	}
+	
+	poll_timer.stop() # Stop polling while waiting for server response
+	awaiting_play_card_response = true # Use this flag to prevent further polling
+	
+	var error = http.request(url, headers, HTTPClient.METHOD_POST, JSON.stringify(payload))
+	if error != OK:
+		message_label.text = "Failed to play card"
+		awaiting_play_card_response = false
+		poll_timer.start()
+	else:
+		print("Play card request sent via drag: ", payload)

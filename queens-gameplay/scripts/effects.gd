@@ -7,17 +7,17 @@ const CARD_MOVE_DURATION := 0.3
 const TEXT_FADE_DURATION := 0.5
 
 # Button effects
-func add_button_effects(button: Button) -> void:
+func add_button_effects(button: Control) -> void:
 	button.mouse_entered.connect(func(): _on_button_hover(button, true))
 	button.mouse_exited.connect(func(): _on_button_hover(button, false))
 	button.pressed.connect(func(): _on_button_press(button))
 
-func _on_button_hover(button: Button, is_hover: bool) -> void:
+func _on_button_hover(button: Control, is_hover: bool) -> void:
 	var tween = create_tween()
 	var scale = Vector2(1.1, 1.1) if is_hover else Vector2(1.0, 1.0)
 	tween.tween_property(button, "scale", scale, BUTTON_HOVER_DURATION).set_trans(Tween.TRANS_ELASTIC)
 
-func _on_button_press(button: Button) -> void:
+func _on_button_press(button: Control) -> void:
 	var tween = create_tween()
 	tween.tween_property(button, "scale", Vector2(0.9, 0.9), BUTTON_PRESS_DURATION)
 	tween.tween_property(button, "scale", Vector2(1.0, 1.0), BUTTON_PRESS_DURATION)
