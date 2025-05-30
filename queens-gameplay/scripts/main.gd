@@ -428,6 +428,7 @@ func _on_card_pressed(card_instance: Node):
 			print("Card instance is no longer valid.")
 			return
 
+		# Check if card is already selected or revealing
 		var already_selected = false
 		for selected_card in selected_initial_cards:
 			if selected_card.card_id == card_data.card_id:
@@ -442,29 +443,30 @@ func _on_card_pressed(card_instance: Node):
 			print("Card is already revealing.")
 			return
 
+		# Check if we've already selected 2 cards
 		var revealing_count = 0
 		for card in player_node.hand:
 			if is_instance_valid(card) and card.has_meta("revealing_timer"):
 				revealing_count += 1
 
 		print("Current revealing count: ", revealing_count, ", Selected cards: ", selected_initial_cards.size())
-		if selected_initial_cards.size() + revealing_count < 2:
-			print("Flipping card and starting reveal timer")
-			card_instance.flip_card(true)
-			card_instance.disabled = true
+		if selected_initial_cards.size() + revealing_count >= 2:
+			print("Already selected maximum number of cards")
+			return
 
-			var reveal_timer = Timer.new()
-			card_instance.add_child(reveal_timer)
-			reveal_timer.wait_time = 3.0
-			reveal_timer.one_shot = true
-			reveal_timer.timeout.connect(func(): _on_initial_card_reveal_timeout(card_data.card_id))
-			reveal_timer.start()
-			card_instance.set_meta("revealing_timer", reveal_timer.get_path())
+		print("Flipping card and starting reveal timer")
+		card_instance.flip_card(true)
+		card_instance.disabled = true  # Disable the card immediately after selection
 
-			message_label.text = "Revealing card... Select %d more." % [2 - (selected_initial_cards.size() + revealing_count + 1)]
-		else:
-			print("Maximum cards already selected or revealing")
+		var reveal_timer = Timer.new()
+		card_instance.add_child(reveal_timer)
+		reveal_timer.wait_time = 3.0
+		reveal_timer.one_shot = true
+		reveal_timer.timeout.connect(func(): _on_initial_card_reveal_timeout(card_data.card_id))
+		reveal_timer.start()
+		card_instance.set_meta("revealing_timer", reveal_timer.get_path())
 
+		message_label.text = "Revealing card... Select %d more." % [2 - (selected_initial_cards.size() + revealing_count + 1)]
 		return
 
 	if jack_swap_mode and jack_player_index == player_index:
@@ -611,6 +613,7 @@ func _on_initial_card_reveal_timeout(card_id: String):
 
 		selected_initial_cards.append(card_instance.card_data)
 		card_instance.flip_card(false)
+		card_instance.disabled = true  # Keep the card disabled after reveal
 
 		var timer_path = card_instance.get_meta("revealing_timer")
 		if timer_path:
@@ -624,7 +627,7 @@ func _on_initial_card_reveal_timeout(card_id: String):
 		if selected_initial_cards.size() == 2:
 			message_label.text = "Two cards selected. Sending to server..."
 			
-			# Disable all cards for this player
+			# Disable all remaining cards
 			for card in player_node.hand:
 				card.disabled = true
 
