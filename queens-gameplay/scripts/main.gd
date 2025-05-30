@@ -423,7 +423,7 @@ func _on_card_pressed(card_instance: Node):
 			return
 
 		var revealing_count = 0
-		for card in player_node.get_children():
+		for card in player_node.hand:
 			if is_instance_valid(card) and card.has_meta("revealing_timer"):
 				revealing_count += 1
 
@@ -435,7 +435,7 @@ func _on_card_pressed(card_instance: Node):
 			card_instance.add_child(reveal_timer)
 			reveal_timer.wait_time = 3.0
 			reveal_timer.one_shot = true
-			reveal_timer.timeout.connect(func(): _on_initial_card_reveal_timeout(card_instance.card_data.card_id))
+			reveal_timer.timeout.connect(func(): _on_initial_card_reveal_timeout(card_data.card_id))
 			reveal_timer.start()
 			card_instance.set_meta("revealing_timer", reveal_timer.get_path())
 

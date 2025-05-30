@@ -67,33 +67,34 @@ func _input_event(_viewport, event, _shape_idx):
 				print("Initial selection mode: ", main_script.initial_selection_mode, ", Holding player: ", holding_player, ", Current player node: ", main_script.get_node("Player%d" % main_script.player_index))
 				if main_script.initial_selection_mode and is_instance_valid(holding_player) and holding_player == main_script.get_node("Player%d" % main_script.player_index):
 					should_trigger_click_action = true
-			elif main_script.king_reveal_mode and main_script.player_index == main_script.king_player_index:
-				should_trigger_click_action = true
-			elif main_script.jack_swap_mode and main_script.player_index == main_script.jack_player_index:
-				should_trigger_click_action = true
+				elif main_script.king_reveal_mode and main_script.player_index == main_script.king_player_index:
+					should_trigger_click_action = true
+				elif main_script.jack_swap_mode and main_script.player_index == main_script.jack_player_index:
+					should_trigger_click_action = true
 					
 				if should_trigger_click_action:
-					pass
+					main_script._on_card_pressed(self)
 				else:
 					start_drag()
 			else:
 				var drag_distance = global_position.distance_to(drag_start_position)
 				var is_click = drag_distance < 10
 				
-				var should_trigger_click_action = false
-				if main_script.initial_selection_mode and is_instance_valid(holding_player) and holding_player == main_script.get_node("Player%d" % main_script.player_index):
-					should_trigger_click_action = true
-				elif main_script.king_reveal_mode and main_script.player_index == main_script.king_player_index:
-					should_trigger_click_action = true
-				elif main_script.jack_swap_mode and main_script.player_index == main_script.jack_player_index:
-							should_trigger_click_action = true
+				if is_click:
+					var should_trigger_click_action = false
+					if main_script.initial_selection_mode and is_instance_valid(holding_player) and holding_player == main_script.get_node("Player%d" % main_script.player_index):
+						should_trigger_click_action = true
+					elif main_script.king_reveal_mode and main_script.player_index == main_script.king_player_index:
+						should_trigger_click_action = true
+					elif main_script.jack_swap_mode and main_script.player_index == main_script.jack_player_index:
+						should_trigger_click_action = true
 
-				if should_trigger_click_action and is_click:
-					print("Click action triggered!")
-					main_script._on_card_pressed(card_data)
-					dragging = false
-				else:
-					end_drag()
+					if should_trigger_click_action:
+						print("Click action triggered!")
+						main_script._on_card_pressed(self)
+						dragging = false
+					else:
+						end_drag()
 					
 func start_drag():
 	var main_script = get_node("/root/Main")
