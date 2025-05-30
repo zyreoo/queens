@@ -402,6 +402,7 @@ func _on_card_pressed(card_instance: Node):
 	var card_data = card_instance.card_data
 
 	if initial_selection_mode:
+		print("In initial selection mode")
 		var player_node = get_node("Player%d" % player_index)
 
 		if !is_instance_valid(card_instance):
@@ -427,7 +428,9 @@ func _on_card_pressed(card_instance: Node):
 			if is_instance_valid(card) and card.has_meta("revealing_timer"):
 				revealing_count += 1
 
+		print("Current revealing count: ", revealing_count, ", Selected cards: ", selected_initial_cards.size())
 		if selected_initial_cards.size() + revealing_count < 2:
+			print("Flipping card and starting reveal timer")
 			card_instance.flip_card(true)
 			card_instance.disabled = true
 
@@ -440,6 +443,8 @@ func _on_card_pressed(card_instance: Node):
 			card_instance.set_meta("revealing_timer", reveal_timer.get_path())
 
 			message_label.text = "Revealing card... Select %d more." % [2 - (selected_initial_cards.size() + revealing_count + 1)]
+		else:
+			print("Maximum cards already selected or revealing")
 
 		return
 

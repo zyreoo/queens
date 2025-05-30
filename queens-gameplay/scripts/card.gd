@@ -73,6 +73,7 @@ func _input_event(_viewport, event, _shape_idx):
 					should_trigger_click_action = true
 					
 				if should_trigger_click_action:
+					print("Triggering click action on press")
 					main_script._on_card_pressed(self)
 				else:
 					start_drag()
@@ -90,12 +91,12 @@ func _input_event(_viewport, event, _shape_idx):
 						should_trigger_click_action = true
 
 					if should_trigger_click_action:
-						print("Click action triggered!")
+						print("Triggering click action on release")
 						main_script._on_card_pressed(self)
 						dragging = false
 					else:
 						end_drag()
-					
+			
 func start_drag():
 	var main_script = get_node("/root/Main")
 	if !main_script:
