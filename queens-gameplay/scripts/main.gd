@@ -227,10 +227,29 @@ func _on_request_completed(_result, response_code, _headers, body):
 				create_room_button.hide()
 				join_button.hide()
 		
-		"play_card":
-			if json.has("hand"):
-				hand = json["hand"]
-				update_player_hand(player_index, hand)
+		"state":
+			print("Processing state update")
+			if json.has("initial_selection_mode"):
+				initial_selection_mode = json["initial_selection_mode"]
+				if initial_selection_mode:
+					message_label.text = "Select 2 cards to reveal."
+					selected_initial_cards = []
+					var player_node = get_node("Player%d" % player_index)
+					if player_node:
+						for card in player_node.hand:
+							card.disabled = false
+							print("Enabled card for selection: ", card.card_data)
+				else:
+					var player_node = get_node("Player%d" % player_index)
+					if player_node:
+						for card in player_node.hand:
+							card.disabled = true
+			
+			if json.has("players"):
+				for player_data in json["players"]:
+					var player_index = player_data["index"]
+					if player_data.has("hand"):
+						update_player_hand(player_index, player_data["hand"])
 			
 			if json.has("center_card"):
 				center_card = json["center_card"]
