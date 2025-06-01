@@ -11,7 +11,11 @@ var holding_player: Node = null
 var hand_index: int = -1
 var is_center_card := false
 var room_id := ""
-var should_trigger_click_action = false;
+var should_trigger_click_action = false
+var fetching := false
+var last_request_type := ""
+var player_id := ""
+var http: HTTPRequest
 
 const BASE_URL = "https://web-production-2342a.up.railway.app/"
 
@@ -134,7 +138,7 @@ func end_drag():
 	var can_play_card = false
 	print("Initial selection mode for play check: ", main_script.initial_selection_mode, ", King reveal mode for play check: ", main_script.king_reveal_mode, ", Jack swap mode for play check: ", main_script.jack_swap_mode, ", Reaction mode for play check: ", main_script.reaction_mode, ", Final round active for play check: ", main_script.final_round_active, ", Player index: ", main_script.player_index, ", Current turn index: ", main_script.current_turn_index, ", Match: ", main_script.player_index == main_script.current_turn_index)
 	if !main_script.initial_selection_mode and !main_script.king_reveal_mode and !main_script.jack_swap_mode and !main_script.reaction_mode and !main_script.final_round_active and main_script.player_index == main_script.current_turn_index:
-		if position.distance_to(get_node("/root/Main/CenterCardSlot").position) < 100:
+		if position.distance_to(get_node("/root/Main/GameContainer/CenterCardSlot").position) < 100:
 			can_play_card = true
 
 	if can_play_card:
@@ -146,7 +150,7 @@ func end_drag():
 	dragging = false
 
 func play_card():
-	effects.animate_card_move(self, get_node("/root/Main/CenterCardSlot").position)
+	effects.animate_card_move(self, get_node("/root/Main/GameContainer/CenterCardSlot").position)
 	var main_script = get_node("/root/Main")
 	if main_script:
 		main_script._on_card_played(card_data)
@@ -156,7 +160,7 @@ func _process(_delta):
 		position = get_global_mouse_position()
 
 func add_button_effects_deferred():
-	if self:
+	if self and !is_center_card:
 		effects.add_button_effects(self)
 
 func fetch_state():

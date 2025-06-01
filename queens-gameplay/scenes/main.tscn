@@ -14,102 +14,70 @@ grow_horizontal = 2
 grow_vertical = 2
 script = ExtResource("1_pcy04")
 
-[node name="RoomManagement" type="Control" parent="."]
-layout_mode = 1
-anchors_preset = 15
-anchor_right = 1.0
-anchor_bottom = 1.0
-grow_horizontal = 2
-grow_vertical = 2
-
-[node name="CreateRoomButton" type="Button" parent="RoomManagement"]
+[node name="MenuContainer" type="VBoxContainer" parent="."]
 layout_mode = 1
 anchors_preset = 8
 anchor_left = 0.5
 anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
-offset_left = -150.0
-offset_top = -60.0
-offset_right = 150.0
-grow_horizontal = 2
-grow_vertical = 2
-theme_override_fonts/font = ExtResource("2_jyhfs")
-theme_override_font_sizes/font_size = 32
-text = "Create Room"
-
-[node name="JoinButton" type="Button" parent="RoomManagement"]
-layout_mode = 1
-anchors_preset = 8
-anchor_left = 0.5
-anchor_top = 0.5
-anchor_right = 0.5
-anchor_bottom = 0.5
-offset_left = -150.0
-offset_top = 10.0
-offset_right = 150.0
-offset_bottom = 70.0
-grow_horizontal = 2
-grow_vertical = 2
-theme_override_fonts/font = ExtResource("2_jyhfs")
-theme_override_font_sizes/font_size = 32
-text = "Join Room"
-
-[node name="RoomList" type="ItemList" parent="RoomManagement"]
-layout_mode = 1
-anchors_preset = -1
-anchor_left = 1.0
-anchor_top = 0.017
-anchor_right = 1.0
-anchor_bottom = 0.017
 offset_left = -200.0
-offset_top = 61.64
-offset_right = -20.0
-offset_bottom = 181.64
-grow_horizontal = 0
-theme_override_font_sizes/font_size = 28
-
-[node name="MessageLabel" type="Label" parent="."]
-layout_mode = 1
-anchors_preset = 5
-anchor_left = 0.5
-anchor_right = 0.5
-offset_left = -300.0
-offset_top = 20.0
-offset_right = 300.0
-offset_bottom = 80.0
+offset_top = -200.0
+offset_right = 200.0
+offset_bottom = 200.0
 grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/separation = 20
+
+[node name="MessageLabel" type="Label" parent="MenuContainer"]
+layout_mode = 2
 theme_override_fonts/font = ExtResource("2_jyhfs")
 theme_override_font_sizes/font_size = 48
 text = "Welcome to Queens!"
 horizontal_alignment = 1
-vertical_alignment = 1
 
-[node name="queens_button" type="Button" parent="."]
-layout_mode = 1
-anchors_preset = 8
-anchor_left = 0.5
-anchor_top = 0.5
-anchor_right = 0.5
-anchor_bottom = 0.5
-offset_left = -100.0
-offset_top = 120.0
-offset_right = 100.0
-offset_bottom = 170.0
-grow_horizontal = 2
-grow_vertical = 2
+[node name="CreateRoomButton" type="Button" parent="MenuContainer"]
+layout_mode = 2
+theme_override_fonts/font = ExtResource("2_jyhfs")
+theme_override_font_sizes/font_size = 32
+text = "Create Room"
+
+[node name="JoinButton" type="Button" parent="MenuContainer"]
+layout_mode = 2
+theme_override_fonts/font = ExtResource("2_jyhfs")
+theme_override_font_sizes/font_size = 32
+text = "Join Room"
+
+[node name="queens_button" type="Button" parent="MenuContainer"]
+layout_mode = 2
 theme_override_font_sizes/font_size = 32
 text = "QUEENS"
+
+[node name="RoomList" type="ItemList" parent="MenuContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_font_sizes/font_size = 28
 
 [node name="HTTPRequest" type="HTTPRequest" parent="."]
 
 [node name="GameContainer" type="Control" parent="."]
+visible = false
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
+
+[node name="RoomNameLabel" type="Label" parent="GameContainer"]
+layout_mode = 0
+offset_left = 20.0
+offset_top = 20.0
+offset_right = 220.0
+offset_bottom = 46.0
+theme_override_font_sizes/font_size = 18
+text = "Room: "
+horizontal_alignment = 1
 
 [node name="Player0" type="Control" parent="GameContainer"]
 layout_mode = 1
@@ -140,42 +108,12 @@ anchor_left = 0.5
 anchor_top = 0.5
 anchor_right = 0.5
 anchor_bottom = 0.5
-offset_left = -100.0
-offset_top = -121.0
-offset_right = 100.0
-offset_bottom = 179.0
+offset_left = -101.0
+offset_top = -126.0
+offset_right = 99.0
+offset_bottom = 174.0
 grow_horizontal = 2
 grow_vertical = 2
-
-[node name="Player0#HandContainer" type="HBoxContainer" parent="."]
-layout_mode = 1
-anchors_preset = 8
-anchor_left = 0.5
-anchor_top = 0.5
-anchor_right = 0.5
-anchor_bottom = 0.5
-offset_left = -200.0
-offset_top = -50.0
-offset_right = 200.0
-offset_bottom = 50.0
-grow_horizontal = 2
-grow_vertical = 2
-alignment = 1
-
-[node name="Player1#HandContainer" type="HBoxContainer" parent="."]
-layout_mode = 1
-anchors_preset = 8
-anchor_left = 0.5
-anchor_top = 0.5
-anchor_right = 0.5
-anchor_bottom = 0.5
-offset_left = -202.0
-offset_top = -44.0
-offset_right = 198.0
-offset_bottom = 56.0
-grow_horizontal = 2
-grow_vertical = 2
-alignment = 1
 
 [node name="Effects" type="Node" parent="."]
 script = ExtResource("4_effects")
@@ -224,7 +162,7 @@ text = "[center][b]Game Rules[/b][/center]
 - Use special cards when it's your turn
 - Watch the center card for valid plays"
 
-[connection signal="pressed" from="RoomManagement/CreateRoomButton" to="." method="_on_create_room_pressed"]
-[connection signal="pressed" from="RoomManagement/JoinButton" to="." method="_on_join_pressed"]
-[connection signal="item_selected" from="RoomManagement/RoomList" to="." method="_on_room_selected"]
-[connection signal="pressed" from="queens_button" to="." method="_on_queens_pressed"]
+[connection signal="pressed" from="MenuContainer/CreateRoomButton" to="." method="_on_create_room_pressed"]
+[connection signal="pressed" from="MenuContainer/JoinButton" to="." method="_on_join_pressed"]
+[connection signal="pressed" from="MenuContainer/queens_button" to="." method="_on_queens_pressed"]
+[connection signal="item_selected" from="MenuContainer/RoomList" to="." method="_on_room_selected"]

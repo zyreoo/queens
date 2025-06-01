@@ -2,11 +2,11 @@
 
 [ext_resource type="Script" uid="uid://c0s7yy2xgo2kb" path="res://scripts/Player1.gd" id="1_pft8i"]
 
-[node name="HBoxContainer" type="Node2D"]
+[node name="HBoxContainer" type="HBoxContainer"]
 script = ExtResource("1_pft8i")
 
 [node name="Label" type="Label" parent="."]
-offset_left = 4.0
-offset_top = 8.0
-offset_right = 5.0
-offset_bottom = 31.0
+layout_mode = 2
+
+[node name="HandContainer" type="HBoxContainer" parent="."]
+layout_mode = 2

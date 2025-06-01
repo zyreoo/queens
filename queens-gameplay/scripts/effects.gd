@@ -44,9 +44,8 @@ func animate_text_pop(label: Label, text: String) -> void:
 
 # Game event effects
 func play_card_played_effect(card: Node2D) -> void:
-	var tween = create_tween()
-	tween.tween_property(card, "scale", Vector2(1.2, 1.2), 0.2)
-	tween.tween_property(card, "scale", Vector2(1.0, 1.0), 0.2)
+	# Removed scaling effect on card played
+	pass
 
 func play_win_effect(node: Node2D) -> void:
 	var tween = create_tween()
