@@ -34,7 +34,7 @@ func set_data(data: Dictionary):
 func flip_card(face_up: bool):
 	print("flip_card called with face_up: ", face_up)
 	if face_up:
-		var image_path = "res://assets/%s_%s.png" % [suit, rank]
+		var image_path = "res://good_cards/%s %s.png" % [suit, rank]
 		texture_normal = load(image_path)
 		if not texture_normal:
 			print("Failed to load card image: ", image_path)
@@ -43,9 +43,9 @@ func flip_card(face_up: bool):
 			print("Loaded card image: ", image_path)
 			
 	else: 
-		texture_normal = load("res://assets/card_back_3.png")
+		texture_normal = load("res://assets/card_back-export.png")
 		if not texture_normal:
-			print("Failed to load card back image: res://assets/card_back_3.png")
+			print("Failed to load card back image: res://assets/card_back-export.png")
 			texture_normal = load("res://assets/default_card.png")
 	visible = true
 			
@@ -158,3 +158,17 @@ func _process(_delta):
 func add_button_effects_deferred():
 	if self:
 		effects.add_button_effects(self)
+
+func fetch_state():
+	if room_id.is_empty() or player_id.is_empty() or fetching:
+		return
+	fetching = true
+	last_request_type = "state"
+	var url = BASE_URL + "state"
+	var headers = ["Content-Type: application/json"]
+	var body = JSON.stringify({
+		"room_id": room_id,
+		"player_id": player_id
+	})
+	print("Fetching state with URL: ", url, ", body: ", body)
+	http.request(url, headers, HTTPClient.METHOD_POST, body)

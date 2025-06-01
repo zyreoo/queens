@@ -1,7 +1,10 @@
-[gd_scene load_steps=2 format=3 uid="uid://dcjg1cr2fpdtu"]
+[gd_scene load_steps=3 format=3 uid="uid://dcjg1cr2fpdtu"]
 
 [ext_resource type="Script" uid="uid://dhh3l5cn32xai" path="res://scripts/card.gd" id="1_ppukc"]
+[ext_resource type="Texture2D" uid="uid://4xx2p07nqoqm" path="res://assets/card_back-export.png" id="2_card_back"]
 
 [node name="Card" type="TextureButton"]
-scale = Vector2(2, 2)
+custom_minimum_size = Vector2(140, 196)
+scale = Vector2(0.8, 0.8)
+texture_normal = ExtResource("2_card_back")
 script = ExtResource("1_ppukc")

@@ -1,9 +1,8 @@
-extends Node2D
+extends Control
 
 @onready var http := $HTTPRequest
 @onready var effects = $Effects
 @onready var message_label := $MessageLabel
-@onready var start_button := $StartGameButton
 @onready var queens_button := $queens_button
 @onready var room_list := $RoomManagement/RoomList
 @onready var center_card_slot := $CenterCardSlot
@@ -57,7 +56,6 @@ func _ready():
 	poll_timer.timeout.connect(fetch_state)
 	
 	http.request_completed.connect(_on_request_completed)
-	start_button.pressed.connect(_on_start_game_pressed)
 	if queens_button:
 		queens_button.pressed.connect(_on_queens_pressed)
 	
@@ -66,6 +64,8 @@ func _ready():
 	call_deferred("get_room_management_nodes")
 
 	call_deferred("add_button_effects_deferred")
+
+	queens_button.visible = false
 
 func get_room_management_nodes():
 	room_management_node = get_node_or_null("RoomManagement")
@@ -81,12 +81,9 @@ func get_room_management_nodes():
 				join_button.pressed.connect(_on_join_pressed)
 				if has_joined and total_players == MAX_PLAYERS:
 					join_button.hide()
+					
 
 func add_button_effects_deferred():
-	if start_button:
-		effects.add_button_effects(start_button)
-	if queens_button:
-		effects.add_button_effects(queens_button)
 	if create_room_button:
 		effects.add_button_effects(create_room_button)
 	if join_button:
@@ -144,10 +141,6 @@ func join_game():
 	var error = http.request(url, headers, HTTPClient.METHOD_POST, body)
 	print("Request error code: ", error)
 	
-func _on_start_game_pressed():
-	effects.animate_text_pop(message_label, "Starting game...")
-	message_label.text = "Game start pressed (no-op unless handled on server)"
-	
 func _on_queens_pressed():
 	effects.animate_text_pop(message_label, "Playing Queens!")
 	if player_index != current_turn_index:
@@ -162,24 +155,18 @@ func _on_queens_pressed():
 	})
 	http.request(url, headers, HTTPClient.METHOD_POST, body)
 	
-func _on_request_completed(_result, response_code, _headers, body):
-	var json_text: String = body.get_string_from_utf8()
-	print("Response code: ", response_code)
-	print("Received response for ", last_request_type, ": ", json_text)
-	var json = JSON.parse_string(json_text)
-	
-	poll_timer.start()
-	awaiting_play_card_response = false
-
-	if typeof(json) != TYPE_DICTIONARY:
-		print("Invalid JSON from server:", json_text)
-		message_label.text = "Server response error."
-		fetching = false
+func _on_request_completed(result, response_code, headers, body):
+	if result != HTTPRequest.RESULT_SUCCESS:
+		print("HTTP request failed: ", result)
 		return
-	if json.has("status") and json["status"] == "error":
-		message_label.text = json.get("message", "Unknown server error")
-		print("Server returned error:", json.get("message", "Unknown error"))
-		fetching = false
+		
+	var json = JSON.parse_string(body.get_string_from_utf8())
+	if !json:
+		print("Failed to parse JSON response")
+		return
+		
+	if json.get("status") == "error":
+		message_label.text = json.get("message", "Error occurred")
 		return
 		
 	match last_request_type:
@@ -209,6 +196,7 @@ func _on_request_completed(_result, response_code, _headers, body):
 			ensure_player_nodes()
 			message_label.text = "Joined as Player %d" % (player_index + 1)
 			poll_timer.start()
+			queens_button.visible = true
 			
 			if json.has("initial_selection_mode"):
 				initial_selection_mode = json["initial_selection_mode"]
@@ -224,8 +212,10 @@ func _on_request_completed(_result, response_code, _headers, body):
 						card.disabled = true
 						
 			if total_players == MAX_PLAYERS:
-				create_room_button.hide()
-				join_button.hide()
+				if create_room_button:
+					create_room_button.hide()
+				if join_button:
+					join_button.hide()
 		
 		"state":
 			print("Processing state update")
@@ -323,6 +313,36 @@ func _on_request_completed(_result, response_code, _headers, body):
 				if json.has("message"):
 					if !king_reveal_mode and !jack_swap_mode:
 						message_label.text = json["message"]
+		
+		"select_initial_cards":
+			if json.has("initial_selection_mode"):
+				initial_selection_mode = json["initial_selection_mode"]
+				if !initial_selection_mode:
+					message_label.text = "Game starting! First player's turn."
+					if json.has("players"):
+						for player_data in json["players"]:
+							update_player_hand(player_data["index"], player_data["hand"])
+					if json.has("current_turn_index"):
+						current_turn_index = json["current_turn_index"]
+						message_label.text = "Your turn!" if player_index == current_turn_index else "Waiting for player %d" % (current_turn_index + 1)
+			else:
+				message_label.text = "Waiting for other players to select their cards..."
+				
+		"play_card":
+			awaiting_play_card_response = false
+			poll_timer.start()
+			
+			if json.has("players"):
+				for player_data in json["players"]:
+					update_player_hand(player_data["index"], player_data["hand"])
+					
+			if json.has("current_turn_index"):
+				current_turn_index = json["current_turn_index"]
+				message_label.text = "Your turn!" if player_index == current_turn_index else "Waiting for player %d" % (current_turn_index + 1)
+				
+			if json.has("center_card"):
+				center_card = json["center_card"]
+				show_center_card(center_card)
 		
 		_:
 			print("Received unexpected response type:", last_request_type)
@@ -469,6 +489,33 @@ func _on_card_pressed(card_instance: Node):
 		message_label.text = "Revealing card... Select %d more." % [2 - (selected_initial_cards.size() + revealing_count + 1)]
 		return
 
+	if king_reveal_mode and king_player_index == player_index:
+		print("In king reveal mode")
+		var player_node = get_node("Player%d" % player_index)
+
+		if !is_instance_valid(card_instance):
+			print("Card instance is no longer valid.")
+			return
+
+		if card_instance.has_meta("revealing_timer"):
+			print("Card is already revealing.")
+			return
+
+		print("Flipping card and starting reveal timer")
+		card_instance.flip_card(true)
+		card_instance.disabled = true  # Disable the card immediately after selection
+
+		var reveal_timer = Timer.new()
+		card_instance.add_child(reveal_timer)
+		reveal_timer.wait_time = 3.0
+		reveal_timer.one_shot = true
+		reveal_timer.timeout.connect(func(): _on_king_reveal_timeout(card_data.card_id))
+		reveal_timer.start()
+		card_instance.set_meta("revealing_timer", reveal_timer.get_path())
+
+		message_label.text = "Revealing card for 3 seconds..."
+		return
+
 	if jack_swap_mode and jack_player_index == player_index:
 		var player_node = get_node("Player%d" % player_index)
 		var opponent_node = get_node("Player%d" % ((player_index + 1) % total_players))
@@ -564,7 +611,7 @@ func ensure_player_nodes():
 			add_child(p)
 
 func fetch_state():
-	if not has_joined or room_id.is_empty():
+	if not has_joined or room_id.is_empty() or player_id.is_empty():
 		return
 		
 	if fetching:
@@ -572,11 +619,12 @@ func fetch_state():
 		
 	fetching = true
 	last_request_type = "state"
-	var url = BASE_URL + "state?room_id=" + room_id
+	var url = BASE_URL + "state?room_id=" + room_id + "&player_id=" + player_id
 	var headers = [
 		"Accept: application/json",
 		"Access-Control-Allow-Origin: *"
 	]
+	print("Fetching state with URL: ", url)
 	var error = http.request(url, headers, HTTPClient.METHOD_GET)
 	print("State request error code: ", error)
 
@@ -658,31 +706,76 @@ func _on_initial_card_reveal_timeout(card_id: String):
 	else:
 		print("Timeout occurred outside of initial selection mode.")
 
+func _on_king_reveal_timeout(card_id: String):
+	print("King reveal timeout for card: ", card_id)
+
+	if king_reveal_mode:
+		var player_node = get_node("Player%d" % player_index)
+		var card_instance = null
+		for card in player_node.hand:
+			if card.card_data.card_id == card_id:
+				card_instance = card
+				break
+
+		if !card_instance:
+			print("Card instance not found after timer.")
+			return
+
+		card_instance.flip_card(false)
+		card_instance.disabled = true  # Keep the card disabled after reveal
+
+		var timer_path = card_instance.get_meta("revealing_timer")
+		if timer_path:
+			var timer_node = get_node(timer_path)
+			if timer_node:
+				timer_node.queue_free()
+			card_instance.remove_meta("revealing_timer")
+
+		# Send the reveal to the server
+		last_request_type = "king_reveal"
+		var url = BASE_URL + "king_reveal"
+		var headers = ["Content-Type: application/json"]
+		var payload = {
+			"room_id": room_id,
+			"player_index": player_index,
+			"revealed_card_id": card_id
+		}
+		poll_timer.stop()
+		awaiting_play_card_response = true
+		var error = http.request(url, headers, HTTPClient.METHOD_POST, JSON.stringify(payload))
+		if error != OK:
+			message_label.text = "Failed to send king reveal"
+			awaiting_play_card_response = false
+			poll_timer.start()
+		else:
+			print("King reveal sent: ", payload)
+			message_label.text = "Waiting for next turn..."
+	else:
+		print("Timeout occurred outside of king reveal mode.")
+
 func _on_card_played(card_data: Dictionary):
-	print("Card played via drag: ", card_data)
+	print("Card played: ", card_data)
 	
-	
+	# Ensure it's the current player's turn before sending the request
 	if player_index != current_turn_index:
-		print("Not your turn! Cannot play card via drag.")
-		message_label.text = "Not your turn!"
+		print("Not current player's turn. Cannot play card.")
 		return
-	
+
+	# Prevent sending multiple requests if one is already in progress
+	if awaiting_play_card_response:
+		print("Already awaiting play card response. Ignoring.")
+		return
+
+	awaiting_play_card_response = true
 	last_request_type = "play_card"
+
 	var url = BASE_URL + "play_card"
 	var headers = ["Content-Type: application/json"]
-	var payload = {
+	var body = JSON.stringify({
 		"room_id": room_id,
 		"player_index": player_index,
-		"card": card_data
-	}
-	
-	poll_timer.stop()
-	awaiting_play_card_response = true
-	
-	var error = http.request(url, headers, HTTPClient.METHOD_POST, JSON.stringify(payload))
-	if error != OK:
-		message_label.text = "Failed to play card"
-		awaiting_play_card_response = false
-		poll_timer.start()
-	else:
-		print("Play card request sent via drag: ", payload)
+		"card_id": card_data["card_id"]
+	})
+
+	print("Playing card on server. URL: ", url, ", Body: ", body)
+	http.request(url, headers, HTTPClient.METHOD_POST, body)

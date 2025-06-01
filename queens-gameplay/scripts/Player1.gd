@@ -1,4 +1,4 @@
-extends Node2D
+extends Control
 
 var hand: Array = []
 var score: int = 0
@@ -37,14 +37,9 @@ func arrange_hand():
 	for i in range(hand.size()):
 		var card = hand[i]
 		var x_pos = start_x + i * spacing
-		card.position = Vector2(x_pos, 0)  
+		card.rect_position = Vector2(x_pos, 0)
 		card.z_index = i 
-		var global_card_pos = card.global_position
-		if global_card_pos.x < 0:
-			card.position.x -= global_card_pos.x 
-		elif global_card_pos.x + card.size.x > screen_size.x:
-			card.position.x -= (global_card_pos.x + card.size.x - screen_size.x)
-		print("Arranged card ", i, " at position: ", card.position, " visible: ", card.visible)
+		print("Arranged card ", i, " at position: ", card.rect_position, " visible: ", card.visible)
 			
 		
 func clear_hand():
