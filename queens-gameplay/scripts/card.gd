@@ -55,20 +55,21 @@ func _on_pressed():
 			var current_player = main_script.get_node_or_null("GameContainer/BottomPlayerContainer/Player%d" % main_script.player_index)
 			if holding_player == current_player:
 				main_script._on_card_pressed(self)
-				return
-		else:
-			return
+		return
 	else:
 		start_drag()
 
 func set_data(data: Dictionary):
-	suit = data["suit"]
-	rank = data["rank"]
-	value = data["value"]
+	if data.has("suit"):
+		suit = data["suit"]
+	if data.has("rank"):
+		rank = data["rank"]
+	if data.has("value"):
+		value = data["value"]
 	card_data = data
 	
 func flip_card(face_up: bool):
-	if face_up:
+	if face_up and suit != "" and rank != "":
 		var image_path = "res://good_cards/%s %s.png" % [suit, rank]
 		var texture = load(image_path)
 		if texture:

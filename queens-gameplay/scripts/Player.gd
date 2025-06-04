@@ -25,6 +25,11 @@ func setup_player(index: int, id: String):
 		label.text = "Player " + str(index)
 
 func update_hand_display(new_hand: Array, local_player: bool, initial_selection: bool):
+	var main_script = get_node("/root/Main")
+	if not main_script:
+		push_error("Main script not found!")
+		return
+		
 	hand = new_hand
 	is_local_player = local_player
 	is_initial_selection = initial_selection
@@ -34,15 +39,12 @@ func update_hand_display(new_hand: Array, local_player: bool, initial_selection:
 		if not is_instance_valid(hand_container):
 			push_error("Hand container not found!")
 			return
-			
+	
+	# Clear existing cards
 	for child in hand_container.get_children():
 		child.queue_free()
-	
-	var main_script = get_node("/root/Main")
-	if not main_script:
-		push_error("Main script not found!")
-		return
 		
+	# Create new cards
 	for card in hand:
 		var card_scene = preload("res://scenes/card.tscn")
 		if !card_scene:
@@ -57,31 +59,38 @@ func update_hand_display(new_hand: Array, local_player: bool, initial_selection:
 		card_node.set_data(card)
 		card_node.holding_player = self
 		
-		# Always start with cards face-down and disabled
+		# Reset card state
 		if card_node.has_method("flip_card"):
-			card_node.flip_card(false)
-			card_node.modulate = Color(1, 1, 1)
-			card_node.disabled = true
-			
-			# During initial selection phase
+			# Initial selection phase handling
 			if initial_selection:
-				# Show selected cards to everyone
 				if card.has("selected") and card.selected:
 					card_node.flip_card(true)
 					card_node.modulate = Color(0.7, 1.0, 0.7)  # Green tint for selected
-				# Only the player can select their own cards
-				if local_player:
-					card_node.disabled = false
-			# During normal gameplay
-			else:
-				# Keep cards face-down by default
+					card_node.disabled = true  # Selected cards should be disabled
+					card_node.mouse_filter = Control.MOUSE_FILTER_IGNORE
+				else:
+					card_node.flip_card(false)
+					card_node.modulate = Color(1, 1, 1)
+					if local_player:
+						card_node.disabled = false
+						card_node.mouse_filter = Control.MOUSE_FILTER_STOP
+					else:
+						card_node.disabled = true
+						card_node.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			
+			# Normal gameplay phase handling
+			elif main_script.game_started:
+				# Reset card appearance for gameplay
 				card_node.flip_card(false)
 				card_node.modulate = Color(1, 1, 1)
 				
-				# Show new card briefly if it's the last card and we just got it
+				# Remove any selection state from initial phase
+				if card.has("selected"):
+					card.erase("selected")
+				
+				# Show new card briefly if it's our turn and we just got it
 				if local_player and card == hand[-1] and main_script.current_turn_index == player_index:
 					card_node.flip_card(true)
-					# Create a timer to flip it back
 					var timer = Timer.new()
 					add_child(timer)
 					timer.wait_time = 2.0
@@ -89,13 +98,18 @@ func update_hand_display(new_hand: Array, local_player: bool, initial_selection:
 					timer.timeout.connect(func(): 
 						if is_instance_valid(card_node) and card_node.has_method("flip_card"):
 							card_node.flip_card(false)
+							card_node.modulate = Color(1, 1, 1)  # Reset color after flip
 						timer.queue_free()
 					)
 					timer.start()
 				
-				# Enable interaction for current player during their turn
-				if local_player and main_script.current_turn_index == player_index and main_script.game_started:
+				# Enable cards for current player during their turn
+				if local_player and main_script.current_turn_index == player_index:
 					card_node.disabled = false
+					card_node.mouse_filter = Control.MOUSE_FILTER_STOP
+				else:
+					card_node.disabled = true
+					card_node.mouse_filter = Control.MOUSE_FILTER_IGNORE
 				
 				# Handle revealed cards (through King effect)
 				if card.has("is_face_up") and card.is_face_up:
