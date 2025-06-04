@@ -1,6 +1,6 @@
-[gd_scene load_steps=3 format=3 uid="uid://cju00lpxwcynu"]
+[gd_scene load_steps=3 format=3 uid="uid://b1bsk3gtivtfv"]
 
-[ext_resource type="Script" uid="uid://coqugwqy7khr7" path="res://scripts/lobby.gd" id="1"]
+[ext_resource type="Script" path="res://scripts/lobby.gd" id="1"]
 [ext_resource type="Script" uid="uid://dbupxig40egti" path="res://scripts/effects.gd" id="2"]
 
 [node name="Lobby" type="Control"]

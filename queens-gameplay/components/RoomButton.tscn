@@ -1,0 +1,8 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="FontFile" path="res://assets/font/m6x11.ttf" id="1"]
+
+[node name="RoomButton" type="Button"]
+text = "Room"
+theme_override_fonts/font = ExtResource("1")
+theme_override_font_sizes/font_size = 32 

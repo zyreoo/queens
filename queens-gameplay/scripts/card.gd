@@ -16,19 +16,51 @@ var fetching := false
 var last_request_type := ""
 var player_id := ""
 var http: HTTPRequest
+var last_preview_update := 0.0
+var drag_start_pos := Vector2()
+const DRAG_THRESHOLD := 5.0
+const PREVIEW_UPDATE_INTERVAL := 0.05
 
-const BASE_URL = "https://web-production-2342a.up.railway.app/"
+const BASE_URL = "http://localhost:3000/"
 
 @onready var effects = get_node("/root/Main/Effects")
 var original_position: Vector2
 var drag_start_position: Vector2
+var initial_z_index: int
 
 func _ready():
 	call_deferred("add_button_effects_deferred")
-	
 	original_position = position
-	mouse_filter = Control.MOUSE_FILTER_PASS
+	initial_z_index = z_index
 	
+	if not is_center_card:
+		mouse_filter = Control.MOUSE_FILTER_STOP
+		focus_mode = Control.FOCUS_ALL
+		mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND
+		if not pressed.is_connected(_on_pressed):
+			pressed.connect(_on_pressed)
+	else:
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+		focus_mode = Control.FOCUS_NONE
+		mouse_default_cursor_shape = Control.CURSOR_ARROW
+		disabled = true
+
+func _on_pressed():
+	var main_script = get_node("/root/Main")
+	if !main_script:
+		return
+
+	if main_script.initial_selection_mode:
+		if is_instance_valid(holding_player):
+			var current_player = main_script.get_node_or_null("GameContainer/BottomPlayerContainer/Player%d" % main_script.player_index)
+			if holding_player == current_player:
+				main_script._on_card_pressed(self)
+				return
+		else:
+			return
+	else:
+		start_drag()
+
 func set_data(data: Dictionary):
 	suit = data["suit"]
 	rank = data["rank"]
@@ -36,128 +68,191 @@ func set_data(data: Dictionary):
 	card_data = data
 	
 func flip_card(face_up: bool):
-	print("flip_card called with face_up: ", face_up)
 	if face_up:
 		var image_path = "res://good_cards/%s %s.png" % [suit, rank]
-		texture_normal = load(image_path)
-		if not texture_normal:
-			print("Failed to load card image: ", image_path)
-			texture_normal = load("res://assets/default_card.png")
+		var texture = load(image_path)
+		if texture:
+			texture_normal = texture
 		else:
-			print("Loaded card image: ", image_path)
-			
+			texture_normal = load("res://assets/default_card.png")
 	else: 
-		texture_normal = load("res://assets/card_back-export.png")
-		if not texture_normal:
-			print("Failed to load card back image: res://assets/card_back-export.png")
+		var back_texture = load("res://assets/card_back-export.png")
+		if back_texture:
+			texture_normal = back_texture
+		else:
 			texture_normal = load("res://assets/default_card.png")
 	visible = true
-			
+
 func _input_event(_viewport, event, _shape_idx):
 	var main_script = get_node("/root/Main")
 	if !main_script:
-		print("Error: Main script not found in card.gd")
 		return
 
-	print("Card input event received: ", event)
-
 	if event is InputEventMouseButton:
-		print("Mouse button event: ", event.button_index, ", pressed: ", event.pressed)
 		if event.button_index == MOUSE_BUTTON_LEFT:
 			if event.pressed:
-				drag_start_position = global_position
-				
-				var should_trigger_click_action = false
-				print("Initial selection mode: ", main_script.initial_selection_mode, ", Holding player: ", holding_player, ", Current player node: ", main_script.get_node("Player%d" % main_script.player_index))
-				if main_script.initial_selection_mode and is_instance_valid(holding_player) and holding_player == main_script.get_node("Player%d" % main_script.player_index):
-					should_trigger_click_action = true
-				elif main_script.king_reveal_mode and main_script.player_index == main_script.king_player_index:
-					should_trigger_click_action = true
-				elif main_script.jack_swap_mode and main_script.player_index == main_script.jack_player_index:
-					should_trigger_click_action = true
-					
-				if should_trigger_click_action:
-					print("Triggering click action on press")
-					main_script._on_card_pressed(self)
-				else:
+				if !dragging:
 					start_drag()
 			else:
-				var drag_distance = global_position.distance_to(drag_start_position)
-				var is_click = drag_distance < 10
-				
-				if is_click:
-					var should_trigger_click_action = false
-					if main_script.initial_selection_mode and is_instance_valid(holding_player) and holding_player == main_script.get_node("Player%d" % main_script.player_index):
-						should_trigger_click_action = true
-					elif main_script.king_reveal_mode and main_script.player_index == main_script.king_player_index:
-						should_trigger_click_action = true
-					elif main_script.jack_swap_mode and main_script.player_index == main_script.jack_player_index:
-						should_trigger_click_action = true
+				end_drag()
 
-					if should_trigger_click_action:
-						print("Triggering click action on release")
-						main_script._on_card_pressed(self)
-						dragging = false
-					else:
-						end_drag()
-			
 func start_drag():
+	if is_center_card:
+		dragging = false
+		return
+		
 	var main_script = get_node("/root/Main")
 	if !main_script:
 		dragging = false
 		return
 
+	if !main_script.game_started or main_script.initial_selection_mode or main_script.player_index != main_script.current_turn_index:
+		dragging = false
+		return
+
+	var player_node = main_script.get_node_or_null("GameContainer/BottomPlayerContainer/Player%d" % main_script.player_index)
+	if player_node:
+		var hand_container = player_node.get_node("HandContainer")
+		if hand_container and hand_container.get_child_count() <= 1:
+			dragging = false
+			return
+
 	var should_prevent_drag = false
-	print("Initial selection mode for drag check: ", main_script.initial_selection_mode, ", Holding player for drag check: ", is_instance_valid(holding_player), ", Current player node for drag check: ", is_instance_valid(main_script.get_node_or_null("Player%d" % main_script.player_index)), ", Match: ", is_instance_valid(holding_player) and is_instance_valid(main_script.get_node_or_null("Player%d" % main_script.player_index)) and holding_player == main_script.get_node("Player%d" % main_script.player_index))
-	if main_script.initial_selection_mode and is_instance_valid(holding_player) and holding_player == main_script.get_node("Player%d" % main_script.player_index):
-		should_prevent_drag = true
-	elif main_script.king_reveal_mode and main_script.player_index == main_script.king_player_index:
+	if main_script.king_reveal_mode and main_script.player_index == main_script.king_player_index:
 		should_prevent_drag = true
 	elif main_script.jack_swap_mode and main_script.player_index == main_script.jack_player_index:
+		should_prevent_drag = true
+	elif main_script.queens_triggered and main_script.player_index == main_script.queens_player_index:
 		should_prevent_drag = true
 
 	if should_prevent_drag:
 		dragging = false
 		return
 
-	dragging = true
-	drag_start_position = position
-	effects.play_card_played_effect(self)
+	drag_start_pos = get_global_mouse_position()
+	original_position = global_position
+	z_index = 100
+	
+	drag_offset = global_position - drag_start_pos
 
 func end_drag():
+	if drag_start_pos != Vector2.ZERO:
+		drag_start_pos = Vector2.ZERO
+		return
+		
 	if !dragging:
 		return
-	dragging = false
 
-	# Check game mode to ensure play_card is only called in normal gameplay
 	var main_script = get_node("/root/Main")
 	if !main_script:
-		print("Error: Main script not found in card.gd on end_drag")
+		dragging = false
+		z_index = initial_z_index
+		effects.animate_card_move(self, original_position)
+		main_script.clear_center_preview()
 		return
 
 	var can_play_card = false
-	print("Initial selection mode for play check: ", main_script.initial_selection_mode, ", King reveal mode for play check: ", main_script.king_reveal_mode, ", Jack swap mode for play check: ", main_script.jack_swap_mode, ", Reaction mode for play check: ", main_script.reaction_mode, ", Final round active for play check: ", main_script.final_round_active, ", Player index: ", main_script.player_index, ", Current turn index: ", main_script.current_turn_index, ", Match: ", main_script.player_index == main_script.current_turn_index)
-	if !main_script.initial_selection_mode and !main_script.king_reveal_mode and !main_script.jack_swap_mode and !main_script.reaction_mode and !main_script.final_round_active and main_script.player_index == main_script.current_turn_index:
-		if position.distance_to(get_node("/root/Main/GameContainer/CenterCardSlot").position) < 100:
+	var center_slot = get_node("/root/Main/GameContainer/CenterCardSlot")
+	if center_slot:
+		var slot_center = center_slot.global_position + (center_slot.size / 2)
+		var card_center = global_position + (size / 2)
+		var distance = card_center.distance_to(slot_center)
+		if distance < 100:
 			can_play_card = true
-
+		else:
+			main_script.clear_center_preview()
+	
 	if can_play_card:
-		print("Playing card via drag.")
 		play_card()
 	else:
-		print("Not playing card via drag. Animating back.")
 		effects.animate_card_move(self, original_position)
+		main_script.clear_center_preview()
+	
 	dragging = false
+	z_index = initial_z_index
 
 func play_card():
-	effects.animate_card_move(self, get_node("/root/Main/GameContainer/CenterCardSlot").position)
+	var center_slot = get_node("/root/Main/GameContainer/CenterCardSlot")
+	if !center_slot:
+		return
+		
+	dragging = false
+	z_index = initial_z_index
+	
+	var slot_center = center_slot.global_position + (center_slot.size / 2)
+	var target_pos = slot_center - (size / 2)
+	
 	var main_script = get_node("/root/Main")
 	if main_script:
-		main_script._on_card_played(card_data)
+		var played_card_data = card_data.duplicate()
+		played_card_data["is_face_up"] = true
+		
+		main_script._on_card_played(played_card_data)
+		main_script.show_center_card(played_card_data)
+		main_script.add_to_used_deck(self)
+		
+		queue_free()
 
 func _process(_delta):
-	if dragging:
-		position = get_global_mouse_position()
+	if !dragging and drag_start_pos != Vector2.ZERO:
+		var current_mouse_pos = get_global_mouse_position()
+		var distance = drag_start_pos.distance_to(current_mouse_pos)
+		if distance > DRAG_THRESHOLD:
+			dragging = true
+			drag_start_pos = Vector2.ZERO
+	elif dragging:
+		var mouse_pos = get_global_mouse_position()
+		var new_pos = mouse_pos + drag_offset
+		global_position = global_position.lerp(new_pos, 0.5)
+		
+		var center_slot = get_node("/root/Main/GameContainer/CenterCardSlot")
+		if center_slot:
+			var slot_center = center_slot.global_position + (center_slot.size / 2)
+			var card_center = global_position + (size / 2)
+			var distance = card_center.distance_to(slot_center)
+			
+			var current_time = Time.get_ticks_msec() / 1000.0
+			if current_time - last_preview_update >= PREVIEW_UPDATE_INTERVAL:
+				last_preview_update = current_time
+				
+				if distance < 100:
+					var main_script = get_node("/root/Main")
+					if main_script:
+						var preview_data = card_data.duplicate()
+						preview_data["is_face_up"] = true
+						main_script.update_center_preview(preview_data)
+				else:
+					var main_script = get_node("/root/Main")
+					if main_script:
+						main_script.clear_center_preview()
+
+func _gui_input(event):
+	if event is InputEventMouseButton:
+		if event.button_index == MOUSE_BUTTON_LEFT:
+			if event.pressed:
+				start_drag()
+			else:
+				if dragging:
+					var center_slot = get_node("/root/Main/GameContainer/CenterCardSlot")
+					if center_slot:
+						var slot_center = center_slot.global_position + (center_slot.size / 2)
+						var card_center = global_position + (size / 2)
+						var distance = card_center.distance_to(slot_center)
+						
+						if distance < 100:
+							var target_pos = slot_center - (size / 2)
+							var main_script = get_node("/root/Main")
+							if main_script:
+								main_script.clear_center_preview()
+								play_card()
+						else:
+							effects.animate_card_move(self, original_position)
+							var main_script = get_node("/root/Main")
+							if main_script:
+								main_script.clear_center_preview()
+					
+					dragging = false
+					z_index = initial_z_index
 
 func add_button_effects_deferred():
 	if self and !is_center_card:
@@ -174,5 +269,15 @@ func fetch_state():
 		"room_id": room_id,
 		"player_id": player_id
 	})
-	print("Fetching state with URL: ", url, ", body: ", body)
 	http.request(url, headers, HTTPClient.METHOD_POST, body)
+
+func get_drag_data(_position):
+	var drag_preview = TextureButton.new()
+	drag_preview.texture_normal = texture_normal
+	drag_preview.size = size
+	set_drag_preview(drag_preview)
+	
+	return card_data
+
+func set_card_data(data: Dictionary):
+	card_data = data

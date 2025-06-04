@@ -8,6 +8,10 @@ const TEXT_FADE_DURATION := 0.5
 
 # Button effects
 func add_button_effects(button: Control) -> void:
+	# Skip effects for center cards
+	if button.has_method("get") and button.get("is_center_card"):
+		return
+		
 	button.mouse_entered.connect(func(): _on_button_hover(button, true))
 	button.mouse_exited.connect(func(): _on_button_hover(button, false))
 	button.pressed.connect(func(): _on_button_press(button))
@@ -23,7 +27,7 @@ func _on_button_press(button: Control) -> void:
 	tween.tween_property(button, "scale", Vector2(1.0, 1.0), BUTTON_PRESS_DURATION)
 
 # Card movement effects
-func animate_card_move(card: Node2D, target_pos: Vector2) -> void:
+func animate_card_move(card: Control, target_pos: Vector2) -> void:
 	var tween = create_tween()
 	tween.tween_property(card, "position", target_pos, CARD_MOVE_DURATION).set_trans(Tween.TRANS_ELASTIC)
 
@@ -42,10 +46,6 @@ func animate_text_pop(label: Label, text: String) -> void:
 	tween.tween_property(label, "scale", Vector2(1.2, 1.2), 0.2)
 	tween.tween_property(label, "scale", Vector2(1.0, 1.0), 0.2)
 
-# Game event effects
-func play_card_played_effect(card: Node2D) -> void:
-	# Removed scaling effect on card played
-	pass
 
 func play_win_effect(node: Node2D) -> void:
 	var tween = create_tween()
