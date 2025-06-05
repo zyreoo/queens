@@ -78,7 +78,7 @@ func flip_card(face_up: bool):
 			push_error("Failed to load card back texture")
 			texture_normal = load("res://icon.svg")
 	else:
-		if suit != "" and rank != "":
+		if suit != "" and rank != "" and suit != "Unknown" and rank != "0":
 			var suit_name = suit.substr(0, 1).to_upper() + suit.substr(1).to_lower()
 			var image_path = "res://good_cards/%s %s.png" % [suit_name, rank]
 			var texture = load(image_path)
@@ -86,9 +86,10 @@ func flip_card(face_up: bool):
 				texture_normal = texture
 			else:
 				push_error("Failed to load card texture: " + image_path)
-				texture_normal = load("res://icon.svg")
+				flip_card(false)  # If we can't load the front texture, show the back
 		else:
-			texture_normal = load("res://icon.svg")
+			# For unknown cards, show the back
+			flip_card(false)
 	visible = true
 
 func temporary_reveal():
