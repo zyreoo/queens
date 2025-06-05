@@ -75,18 +75,43 @@ func flip_card(face_up: bool):
 		if back_texture:
 			texture_normal = back_texture
 		else:
+			push_error("Failed to load card back texture")
 			texture_normal = load("res://icon.svg")
 	else:
 		if suit != "" and rank != "":
-			var image_path = "res://good_cards/%s %s.png" % [suit, rank]
+			var suit_name = suit.substr(0, 1).to_upper() + suit.substr(1).to_lower()
+			var image_path = "res://good_cards/%s %s.png" % [suit_name, rank]
 			var texture = load(image_path)
 			if texture:
 				texture_normal = texture
 			else:
+				push_error("Failed to load card texture: " + image_path)
 				texture_normal = load("res://icon.svg")
 		else:
 			texture_normal = load("res://icon.svg")
 	visible = true
+
+func temporary_reveal():
+	if not card_data.has("was_initially_seen"):
+		card_data["was_initially_seen"] = false
+	
+	if card_data.was_initially_seen:
+		return
+		
+	disabled = true
+	flip_card(true)
+	card_data.was_initially_seen = true
+	
+	var timer = Timer.new()
+	add_child(timer)
+	timer.wait_time = 3.0
+	timer.one_shot = true
+	timer.timeout.connect(func():
+		flip_card(false)
+		disabled = false
+		timer.queue_free()
+	)
+	timer.start()
 
 func _input_event(_viewport, event, _shape_idx):
 	var main_script = get_node("/root/Main")

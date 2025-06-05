@@ -911,24 +911,31 @@ func _on_card_pressed(card_node):
 			return
 
 		var card_data = card_node.card_data
+		if card_data.has("was_initially_seen") and card_data.was_initially_seen:
+			return
+
+		if not card_data.has("is_locked"):
+			card_data["is_locked"] = false
+
+		if card_data.is_locked:
+			return
+
+		# Lock all cards during reveal
+		for card in player_node.get_node("HandContainer").get_children():
+			card.card_data["is_locked"] = true
+
+		# Temporarily reveal the card
+		card_node.temporary_reveal()
+
+		# Check if this card was already selected
 		var already_selected = false
 		for selected_card in _initial_selected_cards:
 			if selected_card.card_id == card_data.card_id:
 				already_selected = true
 				break
 
-		if already_selected:
-			for i in range(_initial_selected_cards.size()):
-				if _initial_selected_cards[i].card_id == card_data.card_id:
-					_initial_selected_cards.remove_at(i)
-					break
-			card_node.flip_card(false)
-			card_node.modulate = Color(1, 1, 1)
-			message_label.text = "Select %d more card(s)" % (2 - _initial_selected_cards.size())
-		else:
+		if not already_selected:
 			_initial_selected_cards.append(card_data)
-			card_node.flip_card(true)
-			card_node.modulate = Color(0.7, 1.0, 0.7)
 			message_label.text = "Select %d more card(s)" % (2 - _initial_selected_cards.size())
 
 			if _initial_selected_cards.size() == 2:
@@ -936,8 +943,5 @@ func _on_card_pressed(card_node):
 				message_label.text = "Initial cards selected! Wait for other players."
 				for card in player_node.get_node("HandContainer").get_children():
 					card.disabled = true
-					if not _initial_selected_cards.has(card.card_data):
-						card.modulate = Color(0.5, 0.5, 0.5)
-						card.flip_card(false)
 	else:
 		card_node.start_drag()

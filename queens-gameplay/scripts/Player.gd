@@ -66,11 +66,17 @@ func update_hand_display(new_hand: Array, local_player: bool, initial_selection:
 			push_error("Error: Failed to load card texture: " + texture_path)
 		
 		if local_player:
-			card_node.flip_card(true)
-			if not card_node.pressed.is_connected(_on_card_pressed):
-				card_node.pressed.connect(_on_card_pressed.bind(card_node))
+			if initial_selection:
+				card_node.flip_card(false)  # Start face down in initial selection
+				if not card_node.pressed.is_connected(_on_card_pressed):
+					card_node.pressed.connect(_on_card_pressed.bind(card_node))
+			else:
+				# Only show face up if not in initial selection and it's the local player
+				card_node.flip_card(true)
+				if not card_node.pressed.is_connected(_on_card_pressed):
+					card_node.pressed.connect(_on_card_pressed.bind(card_node))
 		else:
-			card_node.flip_card(false)
+			card_node.flip_card(false)  # Always face down for opponents
 			card_node.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		
 		hand_container.add_child(card_node)
