@@ -111,6 +111,13 @@ func _on_create_room_pressed():
 	var headers = ["Content-Type: application/json"]
 	var body = "{}"
 	
+	player_index = 0
+	
+	$MenuContainer.hide()
+	$GameContainer.show()
+	
+	ensure_player_nodes()
+	
 	http.request(url, headers, HTTPClient.METHOD_POST, body)
 
 func refresh_room_list():
@@ -136,14 +143,12 @@ func join_game(selected_room_id: String = ""):
 	if is_request_in_progress:
 		return
 		
-	# Update UI before making request
 	effects.animate_text_fade(message_label, "Joining room...")
 	$MenuContainer.visible = false
 	$GameContainer.visible = true
 	if room_name_label:
 		room_name_label.text = "Room: " + room_id
 	
-	# Make join request
 	is_request_in_progress = true
 	last_request_type = "join"
 	var url = BASE_URL + "join"
@@ -177,19 +182,16 @@ func _on_request_completed(result, response_code, headers, body):
 	is_request_in_progress = false
 	
 	if result != HTTPRequest.RESULT_SUCCESS:
-		print("Request failed with result:", result)
 		return
 		
 	var json = JSON.parse_string(body.get_string_from_utf8())
 	
 	if not json:
-		print("Failed to parse JSON response")
 		return
 
 	if json.has("status") and json.status == "error":
 		if json.has("message"):
 			message_label.text = json.message
-			print("Error message from server:", json.message)
 		return
 
 	match last_request_type:
@@ -198,40 +200,29 @@ func _on_request_completed(result, response_code, headers, body):
 		"create_room":
 			if json.has("room_id"):
 				room_id = json.room_id
-				join_game()  # This will handle all the setup
+				room_name_label.text = "Room: " + room_id.left(5) + "..."
+				join_game(room_id)
 		"join":
-			print("Join response received:", JSON.stringify(json))
 			if json.has("player_id") and json.has("player_index"):
-				# Stop room list updates since we're in a game
 				room_update_timer.stop()
 				
-				# Save player info
 				player_id = json.player_id
 				player_index = int(json.player_index)
 				room_id = json.room_id
 				total_players = json.total_players if json.has("total_players") else 0
 				current_turn_index = int(json.current_turn_index) if json.has("current_turn_index") else -1
 				initial_selection_mode = json.initial_selection_mode if json.has("initial_selection_mode") else false
-				print("Initial selection mode received:", initial_selection_mode)
 				
-				print("Player info updated - index:", player_index, "initial_selection:", initial_selection_mode)
-				
-				# Setup player nodes first
 				ensure_player_nodes()
 				
-				# Wait one frame to ensure nodes are created
 				await get_tree().process_frame
 				
-				# Update UI
 				$MenuContainer.hide()
 				$GameContainer.show()
 				room_name_label.text = "Room: " + room_id.left(5) + "..."
 				
-				# Start game state polling
 				has_joined = true
 				
-				# Always fetch full state after join
-				print("Fetching full game state after join...")
 				fetch_state()
 				poll_timer.start()
 		"select_initial_cards":
@@ -249,7 +240,6 @@ func _on_request_completed(result, response_code, headers, body):
 						else:
 							message_label.text = "Game started - Opponent's turn!"
 						
-						# Update all player displays for game start
 						for i in range(2):
 							var container_name = "BottomPlayerContainer" if i == player_index else "TopPlayerContainer"
 							var player_node = $GameContainer.get_node_or_null("%s/Player%d" % [container_name, i])
@@ -268,13 +258,21 @@ func _on_request_completed(result, response_code, headers, body):
 				if json.has("message"):
 					message_label.text = json.message
 				
-				# Show center card if game is starting
 				if json.has("center_card") and json.center_card:
 					show_center_card(json.center_card)
 		"state":
-			print("State update received:", JSON.stringify(json))
 			if json.has("initial_selection_mode"):
 				initial_selection_mode = json.initial_selection_mode
+			if json.has("total_players"):
+				total_players = json.total_players
+			
+			if player_index == 0 and json.has("players"):
+				for p_data in json.players:
+					if p_data.has("index") and int(p_data.index) == 0 and p_data.has("hand"):
+						var player_node = $GameContainer.get_node_or_null("BottomPlayerContainer/Player0")
+						if is_instance_valid(player_node):
+							player_node.update_hand_display(p_data.hand, true, initial_selection_mode)
+						break
 			
 			if json.has("current_turn_index"):
 				var old_turn_index = current_turn_index
@@ -290,25 +288,37 @@ func _on_request_completed(result, response_code, headers, body):
 				show_center_card(json.center_card)
 			
 			if json.has("players"):
-				print("Updating all players from state...")
 				for p_data in json.players:
 					if not p_data.has("index"):
 						continue
 					
 					var p_index = int(p_data.index)
-					var container_name = "BottomPlayerContainer" if p_index == player_index else "TopPlayerContainer"
-					print("Updating player", p_index, "hand in", container_name)
-					var player_node = $GameContainer.get_node_or_null("%s/Player%d" % [container_name, p_index])
-					
+					var player_node = $GameContainer.get_node_or_null("%s/Player%d" % ["BottomPlayerContainer", p_index])
 					if is_instance_valid(player_node):
 						if p_data.has("hand"):
-							print("Updating hand for player", p_index, "with", p_data.hand.size(), "cards")
-							player_node.update_hand_display(p_data.hand, p_index == player_index, initial_selection_mode)
+							var hand_size = p_data.hand.size() if typeof(p_data.hand) == TYPE_ARRAY else 0
+							if typeof(p_data.hand) == TYPE_ARRAY and hand_size > 0:
+								var processed_hand = []
+								for card in p_data.hand:
+									var card_data = {
+										"card_id": card.card_id,
+										"is_face_up": false,
+										"rank": card.rank,
+										"suit": card.suit,
+										"value": float(card.rank)
+									}
+									processed_hand.append(card_data)
+								
+								if processed_hand.size() > 0:
+									player_node.update_hand_display(processed_hand, p_index == player_index, initial_selection_mode)
+								else:
+									print("WARNING: No valid cards processed for opponent")
+							else:
+								player_node.update_hand_display(p_data.hand, p_index == player_index, initial_selection_mode)
 					else:
-						print("Player node not found for index", p_index, ", recreating nodes...")
 						ensure_player_nodes()
 						await get_tree().process_frame
-						player_node = $GameContainer.get_node_or_null("%s/Player%d" % [container_name, p_index])
+						player_node = $GameContainer.get_node_or_null("%s/Player%d" % ["BottomPlayerContainer", p_index])
 						if is_instance_valid(player_node) and p_data.has("hand"):
 							player_node.update_hand_display(p_data.hand, p_index == player_index, initial_selection_mode)
 
@@ -375,13 +385,10 @@ func show_center_card(card_data: Dictionary):
 	center_card = card_data.duplicate()
 
 func ensure_player_nodes():
-	print("Creating player nodes - local player index:", player_index)
-	
 	var bottom_container = $GameContainer.get_node_or_null("BottomPlayerContainer")
 	var top_container = $GameContainer.get_node_or_null("TopPlayerContainer")
 	
 	if bottom_container:
-		print("Clearing bottom container, had", bottom_container.get_child_count(), "children")
 		for child in bottom_container.get_children():
 			child.queue_free()
 	else:
@@ -389,37 +396,41 @@ func ensure_player_nodes():
 		return
 		
 	if top_container:
-		print("Clearing top container, had", top_container.get_child_count(), "children")
 		for child in top_container.get_children():
 			child.queue_free()
 	else:
 		push_error("Error: Top container not found")
 		return
 	
-	for i in range(2):
-		var container_name = "BottomPlayerContainer" if i == player_index else "TopPlayerContainer"
-		print("Creating player", i, "in", container_name)
-		
-		var container = $GameContainer.get_node_or_null(container_name)
-		if not container:
-			push_error("Error: Container not found: ", container_name)
-			return
-			
-		var player_node = preload("res://scenes/Player.tscn").instantiate()
-		if not player_node:
-			push_error("Error: Failed to instantiate Player scene")
-			return
-			
-		player_node.name = "Player%d" % i
-		container.add_child(player_node)
-		player_node.setup_player(i, player_id if i == player_index else "")
-		print("Player", i, "created with ID:", player_id if i == player_index else "none")
-		
-		# Connect initial selection signal
-		if i == player_index:
-			if not player_node.initial_selection_complete.is_connected(_on_initial_selection_complete):
-				player_node.initial_selection_complete.connect(_on_initial_selection_complete)
-				print("Connected initial selection signal for player", i)
+	var player0_node = preload("res://scenes/Player.tscn").instantiate()
+	if not player0_node:
+		push_error("Error: Failed to instantiate Player scene")
+		return
+	
+	player0_node.name = "Player0"
+	if player_index == 0:
+		bottom_container.add_child(player0_node)
+		player0_node.setup_player(0, player_id)
+		if not player0_node.initial_selection_complete.is_connected(_on_initial_selection_complete):
+			player0_node.initial_selection_complete.connect(_on_initial_selection_complete)
+	else:
+		top_container.add_child(player0_node)
+		player0_node.setup_player(0, "")
+	
+	var player1_node = preload("res://scenes/Player.tscn").instantiate()
+	if not player1_node:
+		push_error("Error: Failed to instantiate Player scene")
+		return
+	
+	player1_node.name = "Player1"
+	if player_index == 1:
+		bottom_container.add_child(player1_node)
+		player1_node.setup_player(1, player_id)
+		if not player1_node.initial_selection_complete.is_connected(_on_initial_selection_complete):
+			player1_node.initial_selection_complete.connect(_on_initial_selection_complete)
+	else:
+		top_container.add_child(player1_node)
+		player1_node.setup_player(1, "")
 
 func _on_initial_selection_complete(selected_card_ids: Array):
 	if is_request_in_progress:
@@ -443,20 +454,18 @@ func _on_initial_selection_complete(selected_card_ids: Array):
 
 func fetch_state():
 	if not has_joined or room_id.is_empty() or player_id.is_empty():
-		print("Debug: Skipping state fetch - has_joined:", has_joined, " room_id empty:", room_id.is_empty(), " player_id empty:", player_id.is_empty())
+		poll_timer.start()
 		return
 		
 	poll_timer.stop()
 	
 	if is_request_in_progress:
-		print("Debug: Request already in progress, waiting for next poll")
 		poll_timer.start()
 		return
 		
 	is_request_in_progress = true
 	last_request_type = "state"
 	var url = BASE_URL + "state?room_id=" + room_id + "&player_id=" + player_id
-	print("Debug: Fetching state from URL:", url)
 	
 	var headers = [
 		"Accept: application/json",
@@ -464,7 +473,7 @@ func fetch_state():
 	]
 	var error = http.request(url, headers, HTTPClient.METHOD_GET)
 	if error != OK:
-		print("Error: Failed to fetch state, error code:", error)
+		push_error("Error: Failed to fetch state, error code: %d" % error)
 		poll_timer.start()
 
 func _on_room_selected(idx):
@@ -617,7 +626,7 @@ func send_play_card(card_id: String):
 	http.request(url, headers, HTTPClient.METHOD_POST, body)
 
 func update_room_list(rooms: Array):
-	if room_list and not has_joined:  # Only update if not in a game
+	if room_list and not has_joined:
 		room_list.clear()
 		for room in rooms:
 			var id = room.get("id", "N/A")
@@ -757,10 +766,12 @@ func _on_card_pressed(card_node):
 					_initial_selected_cards.remove_at(i)
 					break
 			card_node.flip_card(false)
+			card_node.modulate = Color(1, 1, 1)
 			message_label.text = "Select %d more card(s)" % (2 - _initial_selected_cards.size())
 		else:
 			_initial_selected_cards.append(card_data)
 			card_node.flip_card(true)
+			card_node.modulate = Color(0.7, 1.0, 0.7)
 			message_label.text = "Select %d more card(s)" % (2 - _initial_selected_cards.size())
 
 			if _initial_selected_cards.size() == 2:

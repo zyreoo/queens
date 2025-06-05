@@ -26,112 +26,82 @@ func setup_player(index: int, id: String):
 		label.text = "Player " + str(index)
 
 func update_hand_display(new_hand: Array, local_player: bool, initial_selection: bool):
-	print("Called update_hand_display with:", new_hand.size(), "cards, local:", local_player, "selection_mode:", initial_selection)
-	
+	if typeof(new_hand) != TYPE_ARRAY:
+		return
+		
 	hand = new_hand
 	is_local_player = local_player
 	is_initial_selection = initial_selection
+	
 	var hand_container = $HandContainer
 	if not is_instance_valid(hand_container):
-		print("ERROR: HandContainer not found in Player node!")
-		push_error("Hand container not found!")
 		return
-		
-	# Clear existing cards and timers
-	print("Clearing", reveal_timers.size(), "existing timers")
+	
 	for timer in reveal_timers.values():
 		if is_instance_valid(timer):
 			timer.queue_free()
 	reveal_timers.clear()
 	temporarily_revealed_cards.clear()
 	
-	print("Clearing", hand_container.get_child_count(), "existing cards")
 	for child in hand_container.get_children():
 		child.queue_free()
-		
-	# Create new cards
-	print("Creating", new_hand.size(), "new cards with initial_selection:", initial_selection)
+	
+	await get_tree().process_frame
+	
 	for card_data in new_hand:
-		var card_node = preload("res://scenes/card.tscn").instantiate()
-		if not card_node:
-			print("ERROR: Failed to instantiate Card scene!")
+		if typeof(card_data) != TYPE_DICTIONARY:
 			continue
 			
-		# Ensure card_data has required fields
+		var card_node = preload("res://scenes/card.tscn").instantiate()
+		if not card_node:
+			continue
+			
 		if not card_data.has("card_id"):
-			print("WARNING: Card data missing card_id, skipping card")
+			card_node.queue_free()
 			continue
 			
 		card_node.set_data(card_data)
+		card_node.holding_player = self
 		
-		if is_local_player and initial_selection:
-			print("Setting up card", card_data.card_id, "for initial selection")
+		if local_player:
 			card_node.mouse_filter = Control.MOUSE_FILTER_STOP
-			card_node.flip_card(false)
-			card_node.pressed.connect(_on_card_pressed.bind(card_node))
+			
+			if initial_selection:
+				card_node.flip_card(false)
+			else:
+				card_node.flip_card(true)
 		else:
 			card_node.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			card_node.flip_card(false)
+			card_node.disabled = true
 		
 		hand_container.add_child(card_node)
-		card_node.holding_player = self
-		
-		# If this card is being temporarily revealed, restore its state
-		if card_data.has("card_id") and temporarily_revealed_cards.has(card_data.card_id):
-			card_node.flip_card(true)
-			card_node.modulate = Color(1.0, 0.9, 0.5)  # Yellow tint for revealed cards
-	
 	
 	hand_container.visible = true
-	hand_container.modulate = Color(1, 1, 1) 
+	hand_container.modulate = Color(1, 1, 1)
 
-func _on_initial_card_pressed(card_node):
+func _on_card_pressed(card_node):
 	if not is_initial_selection:
 		return
 		
-	# Block all interaction if already 2 cards selected
 	if selected_initial_cards.size() >= 2:
 		return
 		
 	var card_id = card_node.card_data.card_id
+	var already_selected = selected_initial_cards.has(card_id)
 	
-	# If card is already selected, ignore
-	if selected_initial_cards.has(card_id):
-		return
-		
-	# If card is being temporarily revealed, ignore
-	if temporarily_revealed_cards.has(card_id):
-		return
-		
-	# Temporarily reveal the card
-	temporarily_revealed_cards[card_id] = true
-	card_node.flip_card(true)
-	card_node.modulate = Color(1.0, 0.9, 0.5)  # Slight yellow tint for preview
-	
-	# Wait for reveal duration
-	await get_tree().create_timer(3.0).timeout
-	
-	# Only proceed if we're still in initial selection mode
-	if not is_initial_selection:
-		return
-		
-	# Flip card back down if it wasn't selected
-	if not selected_initial_cards.has(card_id):
+	if already_selected:
+		selected_initial_cards.erase(card_id)
 		card_node.flip_card(false)
 		card_node.modulate = Color(1, 1, 1)
-	
-	temporarily_revealed_cards.erase(card_id)
-	
-	# Allow selection after preview
-	if selected_initial_cards.size() < 2:
+	else:
 		selected_initial_cards.append(card_id)
-		card_node.modulate = Color(0.7, 1.0, 0.7)  # Green tint for selected
+		card_node.flip_card(true)
+		card_node.modulate = Color(0.7, 1.0, 0.7)
 		
-		# If now 2 cards are selected, complete the selection
 		if selected_initial_cards.size() == 2:
 			emit_signal("initial_selection_complete", selected_initial_cards.duplicate())
 			
-			# Disable all cards and dim unselected ones
 			var hand_container = $HandContainer
 			if hand_container:
 				for card in hand_container.get_children():
@@ -139,35 +109,8 @@ func _on_initial_card_pressed(card_node):
 					if not selected_initial_cards.has(card.card_data.card_id):
 						card.modulate = Color(0.5, 0.5, 0.5)
 						card.flip_card(false)
-
-func _on_card_pressed(card_node):
-	if not is_initial_selection:
-		return
-		
-	print("Card pressed during initial selection:", card_node.card_data.card_id)
-	
-	# Start temporary reveal timer
-	var timer = Timer.new()
-	add_child(timer)
-	timer.wait_time = 3.0
-	timer.one_shot = true
-	timer.timeout.connect(func():
-		if is_instance_valid(card_node):
-			print("Reveal timer finished for card:", card_node.card_data.card_id)
-			card_node.flip_card(false)
-			card_node.modulate = Color(1, 1, 1)
-	)
-	
-	# Reveal the card
-	card_node.flip_card(true)
-	card_node.modulate = Color(1.0, 0.9, 0.5)  # Yellow tint
-	timer.start()
-	
-	# Store the timer
-	reveal_timers[card_node.card_data.card_id] = timer
-	temporarily_revealed_cards.append(card_node.card_data.card_id)
-	
-	print("Started reveal timer for card:", card_node.card_data.card_id)
+					else:
+						card.modulate = Color(0.7, 1.0, 0.7)
 
 func clear_hand():
 	call_deferred("_deferred_clear_hand_container")

@@ -22,6 +22,7 @@ const DRAG_THRESHOLD := 5.0
 const PREVIEW_UPDATE_INTERVAL := 0.05
 
 const BASE_URL = "http://localhost:3000/"
+const DEFAULT_TEXTURE_PATH = "res://icon.svg"
 
 @onready var effects = get_node("/root/Main/Effects")
 var original_position: Vector2
@@ -54,10 +55,10 @@ func _on_pressed():
 		if is_instance_valid(holding_player):
 			var current_player = main_script.get_node_or_null("GameContainer/BottomPlayerContainer/Player%d" % main_script.player_index)
 			if holding_player == current_player:
-				holding_player._on_initial_card_pressed(self)
+				main_script._on_card_pressed(self)
 		return
-	else:
-		start_drag()
+	
+	start_drag()
 
 func set_data(data: Dictionary):
 	if data.has("suit"):
@@ -67,21 +68,24 @@ func set_data(data: Dictionary):
 	if data.has("value"):
 		value = data["value"]
 	card_data = data
-	
+
 func flip_card(face_up: bool):
-	if face_up and suit != "" and rank != "":
-		var image_path = "res://good_cards/%s %s.png" % [suit, rank]
-		var texture = load(image_path)
-		if texture:
-			texture_normal = texture
-		else:
-			texture_normal = load("res://assets/default_card.png")
-	else: 
+	if not face_up:
 		var back_texture = load("res://assets/card_back-export.png")
 		if back_texture:
 			texture_normal = back_texture
 		else:
-			texture_normal = load("res://assets/default_card.png")
+			texture_normal = load("res://icon.svg")
+	else:
+		if suit != "" and rank != "":
+			var image_path = "res://good_cards/%s %s.png" % [suit, rank]
+			var texture = load(image_path)
+			if texture:
+				texture_normal = texture
+			else:
+				texture_normal = load("res://icon.svg")
+		else:
+			texture_normal = load("res://icon.svg")
 	visible = true
 
 func _input_event(_viewport, event, _shape_idx):
@@ -149,9 +153,6 @@ func end_drag():
 	else:
 		effects.animate_card_move(self, original_position)
 		main_script.clear_center_preview()
-	
-	dragging = false
-	z_index = initial_z_index
 
 func play_card():
 	var center_slot = get_node("/root/Main/GameContainer/CenterCardSlot")
