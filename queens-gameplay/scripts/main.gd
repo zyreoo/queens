@@ -53,10 +53,11 @@ func _ready():
 		room_id = RoomState.room_id
 		join_game()
 		return
-	var stored_id = ProjectSettings.get_setting("application/config/player_id", "")
-	if typeof(stored_id) != TYPE_STRING or stored_id == "":
-		stored_id = str(randi())
-	player_id = stored_id
+		
+	# Always generate a new unique player_id
+	var timestamp = Time.get_unix_time_from_system()
+	var random_num = randi() % 1000000
+	player_id = "%d_%d" % [timestamp, random_num]
 	
 	add_child(poll_timer)
 	poll_timer.wait_time = 1.0
@@ -143,6 +144,8 @@ func join_game(selected_room_id: String = ""):
 	if is_request_in_progress:
 		return
 		
+	print("[JOIN GAME] Attempting to join room:", room_id)
+	
 	effects.animate_text_fade(message_label, "Joining room...")
 	$MenuContainer.visible = false
 	$GameContainer.visible = true
@@ -161,6 +164,7 @@ func join_game(selected_room_id: String = ""):
 	if player_id != "":
 		body_dict["player_id"] = player_id
 	var body = JSON.stringify(body_dict)
+	print("[JOIN GAME] Sending request with player_id:", player_id)
 	http.request(url, headers, HTTPClient.METHOD_POST, body)
 
 func _on_queens_pressed():
@@ -223,8 +227,11 @@ func _on_request_completed(result, response_code, headers, body):
 				
 				has_joined = true
 				
-				fetch_state()
+				if player_index == 0:
+					fetch_state()
 				poll_timer.start()
+		"state":
+			process_state_response(json)
 		"select_initial_cards":
 			if json.has("status") and json.status == "ok":
 				if json.has("game_started") and json.game_started:
@@ -260,94 +267,6 @@ func _on_request_completed(result, response_code, headers, body):
 				
 				if json.has("center_card") and json.center_card:
 					show_center_card(json.center_card)
-		"state":
-			if json.has("initial_selection_mode"):
-				initial_selection_mode = json.initial_selection_mode
-			if json.has("total_players"):
-				total_players = json.total_players
-			
-			if player_index == 0 and json.has("players"):
-				for p_data in json.players:
-					if p_data.has("index") and int(p_data.index) == 0 and p_data.has("hand"):
-						var player_node = $GameContainer.get_node_or_null("BottomPlayerContainer/Player0")
-						if is_instance_valid(player_node):
-							player_node.update_hand_display(p_data.hand, true, initial_selection_mode)
-						break
-			
-			if json.has("current_turn_index"):
-				var old_turn_index = current_turn_index
-				current_turn_index = int(json.current_turn_index)
-				
-				if old_turn_index != current_turn_index and not initial_selection_mode:
-					if current_turn_index == player_index:
-						message_label.text = "Your turn!"
-					else:
-						message_label.text = "Opponent's turn!"
-			
-			if json.has("center_card") and not initial_selection_mode:
-				show_center_card(json.center_card)
-			
-			if json.has("players"):
-				for p_data in json.players:
-					if not p_data.has("index"):
-						continue
-					
-					var p_index = int(p_data.index)
-					var player_node = $GameContainer.get_node_or_null("%s/Player%d" % ["BottomPlayerContainer", p_index])
-					if is_instance_valid(player_node):
-						if p_data.has("hand"):
-							var hand_size = p_data.hand.size() if typeof(p_data.hand) == TYPE_ARRAY else 0
-							if typeof(p_data.hand) == TYPE_ARRAY and hand_size > 0:
-								var processed_hand = []
-								for card in p_data.hand:
-									var card_data = {
-										"card_id": card.card_id,
-										"is_face_up": false,
-										"rank": card.rank,
-										"suit": card.suit,
-										"value": float(card.rank)
-									}
-									processed_hand.append(card_data)
-								
-								if processed_hand.size() > 0:
-									player_node.update_hand_display(processed_hand, p_index == player_index, initial_selection_mode)
-								else:
-									print("WARNING: No valid cards processed for opponent")
-							else:
-								player_node.update_hand_display(p_data.hand, p_index == player_index, initial_selection_mode)
-					else:
-						ensure_player_nodes()
-						await get_tree().process_frame
-						player_node = $GameContainer.get_node_or_null("%s/Player%d" % ["BottomPlayerContainer", p_index])
-						if is_instance_valid(player_node) and p_data.has("hand"):
-							player_node.update_hand_display(p_data.hand, p_index == player_index, initial_selection_mode)
-
-		"jack_swap":
-			if json.has("status") and json.status == "ok":
-				jack_swap_mode = false
-				if json.has("player_hand"):
-					var player_node = $GameContainer.get_node_or_null("BottomPlayerContainer/Player%d" % player_index)
-					if is_instance_valid(player_node):
-						player_node.update_hand_display(json.player_hand, true, false)
-				
-				if json.has("center_card"):
-					show_center_card(json.center_card)
-				if json.has("current_turn_index"):
-					current_turn_index = int(json.current_turn_index)
-				message_label.text = "Cards swapped successfully!"
-		
-		"king_reveal":
-			if json.has("status") and json.status == "ok":
-				king_reveal_mode = false
-				if json.has("center_card"):
-					show_center_card(json.center_card)
-				if json.has("current_turn_index"):
-					current_turn_index = int(json.current_turn_index)
-				message_label.text = "Card revealed for 3 seconds!"
-				
-				disable_all_cards()
-
-	last_request_type = ""
 
 func update_player_hand(for_player_index: int, hand_data: Array):
 	var container_name = "BottomPlayerContainer" if for_player_index == player_index else "TopPlayerContainer"
@@ -361,6 +280,7 @@ func update_player_hand(for_player_index: int, hand_data: Array):
 				player_node.get_parent().remove_child(player_node)
 				container.add_child(player_node)
 		else:
+			push_error("Error: Player node not found")
 			return
 	
 	player_node.update_hand_display(hand_data, for_player_index == player_index, initial_selection_mode)
@@ -388,23 +308,41 @@ func ensure_player_nodes():
 	var bottom_container = $GameContainer.get_node_or_null("BottomPlayerContainer")
 	var top_container = $GameContainer.get_node_or_null("TopPlayerContainer")
 	
-	if bottom_container:
-		for child in bottom_container.get_children():
-			child.queue_free()
-	else:
+	if not bottom_container:
 		push_error("Error: Bottom container not found")
 		return
 		
-	if top_container:
-		for child in top_container.get_children():
-			child.queue_free()
-	else:
+	if not top_container:
 		push_error("Error: Top container not found")
 		return
 	
-	var player0_node = preload("res://scenes/Player.tscn").instantiate()
+	bottom_container.size = Vector2(1000, 250)
+	bottom_container.custom_minimum_size = Vector2(1000, 250)
+	bottom_container.position = Vector2(50, 500)
+	
+	top_container.size = Vector2(1000, 250)
+	top_container.custom_minimum_size = Vector2(1000, 250)
+	top_container.position = Vector2(50, 50)
+	
+	for child in bottom_container.get_children():
+		child.queue_free()
+	for child in top_container.get_children():
+		child.queue_free()
+	
+	var player_scene = load("res://scenes/Player.tscn")
+	if not player_scene:
+		push_error("Error: Failed to load Player.tscn scene file")
+		return
+	
+	var player0_node = player_scene.instantiate()
 	if not player0_node:
-		push_error("Error: Failed to instantiate Player scene")
+		push_error("Error: Failed to instantiate Player0 scene")
+		return
+	
+	var hand_container0 = player0_node.get_node_or_null("HandContainer")
+	if not hand_container0:
+		push_error("Error: HandContainer not found in Player0 node")
+		player0_node.queue_free()
 		return
 	
 	player0_node.name = "Player0"
@@ -417,9 +355,15 @@ func ensure_player_nodes():
 		top_container.add_child(player0_node)
 		player0_node.setup_player(0, "")
 	
-	var player1_node = preload("res://scenes/Player.tscn").instantiate()
+	var player1_node = player_scene.instantiate()
 	if not player1_node:
-		push_error("Error: Failed to instantiate Player scene")
+		push_error("Error: Failed to instantiate Player1 scene")
+		return
+	
+	var hand_container1 = player1_node.get_node_or_null("HandContainer")
+	if not hand_container1:
+		push_error("Error: HandContainer not found in Player1 node")
+		player1_node.queue_free()
 		return
 	
 	player1_node.name = "Player1"
@@ -431,6 +375,17 @@ func ensure_player_nodes():
 	else:
 		top_container.add_child(player1_node)
 		player1_node.setup_player(1, "")
+	
+	$GameContainer.visible = true
+	$GameContainer.modulate = Color(1, 1, 1)
+	
+	bottom_container.visible = true
+	bottom_container.modulate = Color(1, 1, 1)
+	
+	top_container.visible = true
+	top_container.modulate = Color(1, 1, 1)
+	
+	await get_tree().process_frame
 
 func _on_initial_selection_complete(selected_card_ids: Array):
 	if is_request_in_progress:
@@ -457,24 +412,226 @@ func fetch_state():
 		poll_timer.start()
 		return
 		
-	poll_timer.stop()
-	
 	if is_request_in_progress:
 		poll_timer.start()
 		return
 		
+	if not validate_game_state():
+		push_error("Error: Invalid game state - reinitializing...")
+		reinitialize_game_state()
+		return
+		
 	is_request_in_progress = true
 	last_request_type = "state"
+	
 	var url = BASE_URL + "state?room_id=" + room_id + "&player_id=" + player_id
 	
 	var headers = [
 		"Accept: application/json",
 		"Access-Control-Allow-Origin: *"
 	]
+	
+	# Create a timeout timer that will be cleaned up after use
+	var timeout_timer = Timer.new()
+	timeout_timer.name = "StateRequestTimer"
+	add_child(timeout_timer)
+	timeout_timer.wait_time = 10.0  # Increased timeout to 10 seconds
+	timeout_timer.one_shot = true
+	timeout_timer.timeout.connect(func():
+		if is_request_in_progress and last_request_type == "state":
+			push_error("Error: State fetch request timed out")
+			is_request_in_progress = false
+			# Retry the request after a short delay
+			var retry_timer = Timer.new()
+			add_child(retry_timer)
+			retry_timer.wait_time = 2.0
+			retry_timer.one_shot = true
+			retry_timer.timeout.connect(func():
+				retry_timer.queue_free()
+				fetch_state()
+			)
+			retry_timer.start()
+		timeout_timer.queue_free()
+	)
+	
+	# Connect to request completion to cleanup timer
+	if not http.request_completed.is_connected(_on_state_request_completed):
+		http.request_completed.connect(_on_state_request_completed)
+	
 	var error = http.request(url, headers, HTTPClient.METHOD_GET)
 	if error != OK:
 		push_error("Error: Failed to fetch state, error code: %d" % error)
+		is_request_in_progress = false
+		timeout_timer.queue_free()
 		poll_timer.start()
+		return
+		
+	timeout_timer.start()
+
+func _on_state_request_completed(result: int, response_code: int, headers: PackedStringArray, body: PackedByteArray):
+	# Clean up the timeout timer if it exists
+	var timeout_timer = get_node_or_null("StateRequestTimer")
+	if timeout_timer:
+		timeout_timer.queue_free()
+	
+	# Disconnect this specific completion handler
+	if http.request_completed.is_connected(_on_state_request_completed):
+		http.request_completed.disconnect(_on_state_request_completed)
+	
+	# Process the response
+	is_request_in_progress = false
+	
+	if result != HTTPRequest.RESULT_SUCCESS:
+		push_error("Error: State request failed with result code %d" % result)
+		poll_timer.start()
+		return
+		
+	if response_code != 200:
+		push_error("Error: Server returned status code %d" % response_code)
+		poll_timer.start()
+		return
+		
+	var json = JSON.parse_string(body.get_string_from_utf8())
+	if not json:
+		push_error("Error: Invalid JSON response from server")
+		poll_timer.start()
+		return
+		
+	process_state_response(json)
+	poll_timer.start()
+
+func validate_game_state() -> bool:
+	if not is_instance_valid($GameContainer):
+		return false
+		
+	if player_index < 0 or player_index >= MAX_PLAYERS:
+		return false
+		
+	var bottom_container = $GameContainer.get_node_or_null("BottomPlayerContainer")
+	var top_container = $GameContainer.get_node_or_null("TopPlayerContainer")
+	
+	if not is_instance_valid(bottom_container) or not is_instance_valid(top_container):
+		return false
+		
+	var player_node = $GameContainer.get_node_or_null("%s/Player%d" % ["BottomPlayerContainer", player_index])
+	if not is_instance_valid(player_node):
+		return false
+		
+	return true
+
+func reinitialize_game_state():
+	current_turn_index = -1
+	initial_selection_mode = false
+	game_started = false
+	_initial_selected_cards.clear()
+	
+	ensure_player_nodes()
+	
+	$MenuContainer.hide()
+	$GameContainer.show()
+	if room_name_label:
+		room_name_label.text = "Room: " + room_id.left(5) + "..."
+	
+	poll_timer.start()
+
+func process_state_response(json: Dictionary):
+	if not json:
+		push_error("Error: Empty state response")
+		return
+		
+	if json.has("error"):
+		push_error("Error from server: " + str(json.error))
+		return
+		
+	if json.has("initial_selection_mode"):
+		initial_selection_mode = json.initial_selection_mode
+	if json.has("total_players"):
+		total_players = json.total_players
+	
+	if json.has("players"):
+		for p_data in json.players:
+			if not p_data.has("index"):
+				continue
+				
+			var p_index = int(p_data.index)
+			if p_index < 0 or p_index >= MAX_PLAYERS:
+				continue
+			
+			var container_name = "BottomPlayerContainer" if p_index == player_index else "TopPlayerContainer"
+			var container = $GameContainer.get_node_or_null(container_name)
+			if not container:
+				push_error("Container not found: " + container_name)
+				continue
+			
+			var player_node = container.get_node_or_null("Player%d" % p_index)
+			if not is_instance_valid(player_node):
+				ensure_player_nodes()
+				await get_tree().process_frame
+				player_node = container.get_node_or_null("Player%d" % p_index)
+				
+				if not is_instance_valid(player_node):
+					push_error("Failed to create player node after ensure_player_nodes")
+					continue
+			
+			if is_instance_valid(player_node):
+				if p_data.has("hand"):
+					var hand_data = p_data.hand
+					if typeof(hand_data) == TYPE_ARRAY:
+						var processed_hand = []
+						for card in hand_data:
+							if typeof(card) == TYPE_DICTIONARY and card.has("card_id"):
+								var card_data = {
+									"card_id": card.card_id,
+									"is_face_up": p_index == player_index,
+									"rank": card.rank if card.has("rank") else "0",
+									"suit": card.suit if card.has("suit") else "Unknown",
+									"value": float(card.rank) if card.has("rank") else 0.0
+								}
+								processed_hand.append(card_data)
+						
+						if processed_hand.size() > 0:
+							player_node.update_hand_display(processed_hand, p_index == player_index, initial_selection_mode)
+						else:
+							push_warning("Warning: No valid cards processed for player " + str(p_index))
+					else:
+						push_warning("Warning: Invalid hand data type for player " + str(p_index))
+				else:
+					push_warning("Warning: No hand data for player " + str(p_index))
+			else:
+				push_error("Error: Player node not valid after creation attempt")
+	
+	if json.has("current_turn_index"):
+		var old_turn_index = current_turn_index
+		current_turn_index = int(json.current_turn_index)
+		
+		if old_turn_index != current_turn_index and not initial_selection_mode:
+			if current_turn_index == player_index:
+				message_label.text = "Your turn!"
+			else:
+				message_label.text = "Opponent's turn!"
+	
+	if json.has("center_card") and not initial_selection_mode:
+		show_center_card(json.center_card)
+
+func display_container_error(container: Node, error_message: String):
+	if not container:
+		return
+		
+	# Create error label
+	var error_label = Label.new()
+	error_label.text = "Error: " + error_message
+	error_label.modulate = Color(1, 0, 0)  # Red color
+	error_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	container.add_child(error_label)
+	
+	# Create error background
+	var error_bg = ColorRect.new()
+	error_bg.custom_minimum_size = Vector2(200, 50)
+	error_bg.color = Color(0.8, 0, 0, 0.3)  # Semi-transparent red
+	error_bg.show_behind_parent = true
+	container.add_child(error_bg)
+	
+
 
 func _on_room_selected(idx):
 	if room_list:

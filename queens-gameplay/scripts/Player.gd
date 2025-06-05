@@ -10,10 +10,11 @@ var card_back_texture = preload("res://assets/card_back-export.png")
 var temporarily_revealed_cards = {}
 var reveal_timers = {}
 
+@onready var hand_container = $HandContainer
+
 signal initial_selection_complete(selected_card_ids)
 
 func _ready():
-	var hand_container = $HandContainer
 	if not hand_container:
 		push_error("HandContainer not found in _ready!")
 
@@ -26,97 +27,72 @@ func setup_player(index: int, id: String):
 		label.text = "Player " + str(index)
 
 func update_hand_display(new_hand: Array, local_player: bool, initial_selection: bool):
-	if typeof(new_hand) != TYPE_ARRAY:
-		return
-		
-	hand = new_hand
-	is_local_player = local_player
-	is_initial_selection = initial_selection
-	
-	var hand_container = $HandContainer
 	if not is_instance_valid(hand_container):
+		push_error("Error: Hand container not found")
 		return
-	
-	for timer in reveal_timers.values():
-		if is_instance_valid(timer):
-			timer.queue_free()
-	reveal_timers.clear()
-	temporarily_revealed_cards.clear()
 	
 	for child in hand_container.get_children():
 		child.queue_free()
 	
-	await get_tree().process_frame
+	var cards_added = 0
+	var card_width = 100
+	var card_height = 150
+	var card_spacing = 20
+	var total_width = (card_width + card_spacing) * new_hand.size() - card_spacing
+	var start_x = (hand_container.size.x - total_width) / 2
+	
+	hand_container.size = Vector2(1000, 200)
+	hand_container.custom_minimum_size = Vector2(1000, 200)
+	hand_container.position = Vector2(0, 25)
 	
 	for card_data in new_hand:
-		if typeof(card_data) != TYPE_DICTIONARY:
-			continue
-			
 		var card_node = preload("res://scenes/card.tscn").instantiate()
 		if not card_node:
+			push_error("Error: Failed to instantiate card scene")
 			continue
-			
-		if not card_data.has("card_id"):
-			card_node.queue_free()
-			continue
-			
-		card_node.set_data(card_data)
+		
 		card_node.holding_player = self
+		card_node.set_data(card_data)
+		card_node.size = Vector2(card_width, card_height)
+		card_node.position.x = start_x + (card_width + card_spacing) * cards_added
+		card_node.position.y = (hand_container.size.y - card_height) / 2
+		
+		var suit_name = card_data.suit.substr(0, 1).to_upper() + card_data.suit.substr(1).to_lower()
+		var texture_path = "res://good_cards/%s %s.png" % [suit_name, card_data.rank]
+		var texture = load(texture_path)
+		if texture:
+			card_node.texture_normal = texture
+		else:
+			push_error("Error: Failed to load card texture: " + texture_path)
 		
 		if local_player:
-			card_node.mouse_filter = Control.MOUSE_FILTER_STOP
-			
-			if initial_selection:
-				card_node.flip_card(false)
-			else:
-				card_node.flip_card(true)
+			card_node.flip_card(true)
+			if not card_node.pressed.is_connected(_on_card_pressed):
+				card_node.pressed.connect(_on_card_pressed.bind(card_node))
 		else:
-			card_node.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			card_node.flip_card(false)
-			card_node.disabled = true
+			card_node.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		
 		hand_container.add_child(card_node)
+		cards_added += 1
 	
-	hand_container.visible = true
-	hand_container.modulate = Color(1, 1, 1)
+	if cards_added == 0:
+		display_error_card("No cards to display")
 
 func _on_card_pressed(card_node):
-	if not is_initial_selection:
+	if not card_node:
 		return
 		
-	if selected_initial_cards.size() >= 2:
-		return
-		
-	var card_id = card_node.card_data.card_id
-	var already_selected = selected_initial_cards.has(card_id)
+	if not card_node.pressed.is_connected(_on_card_pressed):
+		card_node.pressed.connect(_on_card_pressed.bind(card_node))
 	
-	if already_selected:
-		selected_initial_cards.erase(card_id)
-		card_node.flip_card(false)
-		card_node.modulate = Color(1, 1, 1)
-	else:
-		selected_initial_cards.append(card_id)
-		card_node.flip_card(true)
-		card_node.modulate = Color(0.7, 1.0, 0.7)
-		
-		if selected_initial_cards.size() == 2:
-			emit_signal("initial_selection_complete", selected_initial_cards.duplicate())
-			
-			var hand_container = $HandContainer
-			if hand_container:
-				for card in hand_container.get_children():
-					card.disabled = true
-					if not selected_initial_cards.has(card.card_data.card_id):
-						card.modulate = Color(0.5, 0.5, 0.5)
-						card.flip_card(false)
-					else:
-						card.modulate = Color(0.7, 1.0, 0.7)
+	if initial_selection_complete:
+		initial_selection_complete.emit([card_node.card_data.card_id])
 
 func clear_hand():
 	call_deferred("_deferred_clear_hand_container")
 	
 func _deferred_clear_hand_container():
-	var hand_container = $"HandContainer"
 	if is_instance_valid(hand_container):
 		for child in hand_container.get_children():
 			child.queue_free()
@@ -140,4 +116,21 @@ func set_initial_selection_mode(enable: bool):
 	is_initial_selection = enable
 	selected_initial_cards.clear()
 	update_hand_display(hand, is_local_player, is_initial_selection)
+
+func display_error_card(error_message: String):
+	var error_card = ColorRect.new()
+	error_card.color = Color(0.8, 0, 0, 0.3)
+	error_card.custom_minimum_size = Vector2(100, 150)
+	error_card.size = Vector2(100, 150)
+	error_card.position = Vector2((hand_container.size.x - 100) / 2, (hand_container.size.y - 150) / 2)
+	
+	var error_label = Label.new()
+	error_label.text = error_message
+	error_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	error_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	error_label.custom_minimum_size = Vector2(100, 150)
+	error_label.size = Vector2(100, 150)
+	
+	error_card.add_child(error_label)
+	hand_container.add_child(error_card)
  
