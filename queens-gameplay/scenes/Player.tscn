@@ -17,8 +17,10 @@ script = ExtResource("1_p0vlq")
 [node name="Label" type="Label" parent="."]
 layout_mode = 2
 theme_override_font_sizes/font_size = 24
+text = "Player"
 
 [node name="HandContainer" type="HBoxContainer" parent="."]
 layout_mode = 2
+size_flags_horizontal = 3
 theme_override_constants/separation = 10
 alignment = 1

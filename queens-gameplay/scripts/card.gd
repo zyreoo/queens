@@ -54,7 +54,7 @@ func _on_pressed():
 		if is_instance_valid(holding_player):
 			var current_player = main_script.get_node_or_null("GameContainer/BottomPlayerContainer/Player%d" % main_script.player_index)
 			if holding_player == current_player:
-				main_script._on_card_pressed(self)
+				holding_player._on_initial_card_pressed(self)
 		return
 	else:
 		start_drag()
@@ -107,33 +107,14 @@ func start_drag():
 		dragging = false
 		return
 
-	if !main_script.game_started or main_script.initial_selection_mode or main_script.player_index != main_script.current_turn_index:
-		dragging = false
-		return
-
-	var player_node = main_script.get_node_or_null("GameContainer/BottomPlayerContainer/Player%d" % main_script.player_index)
-	if player_node:
-		var hand_container = player_node.get_node("HandContainer")
-		if hand_container and hand_container.get_child_count() <= 1:
-			dragging = false
-			return
-
-	var should_prevent_drag = false
-	if main_script.king_reveal_mode and main_script.player_index == main_script.king_player_index:
-		should_prevent_drag = true
-	elif main_script.jack_swap_mode and main_script.player_index == main_script.jack_player_index:
-		should_prevent_drag = true
-	elif main_script.queens_triggered and main_script.player_index == main_script.queens_player_index:
-		should_prevent_drag = true
-
-	if should_prevent_drag:
+	if !main_script.game_started or main_script.initial_selection_mode:
 		dragging = false
 		return
 
 	drag_start_pos = get_global_mouse_position()
 	original_position = global_position
 	z_index = 100
-	
+	dragging = true
 	drag_offset = global_position - drag_start_pos
 
 func end_drag():

@@ -1,4 +1,4 @@
-[gd_scene load_steps=3 format=3 uid="uid://cs460u3e5upw4"]
+[gd_scene load_steps=3 format=3 uid="uid://c2pouy2mejmkj"]
 
 [ext_resource type="Script" uid="uid://dhh3l5cn32xai" path="res://scripts/card.gd" id="1_ppukc"]
 [ext_resource type="Texture2D" uid="uid://4xx2p07nqoqm" path="res://assets/card_back-export.png" id="2_card_back"]
@@ -8,5 +8,8 @@ custom_minimum_size = Vector2(140, 196)
 offset_right = 200.0
 offset_bottom = 300.0
 scale = Vector2(0.8, 0.8)
+mouse_default_cursor_shape = 2
 texture_normal = ExtResource("2_card_back")
+ignore_texture_size = true
+stretch_mode = 5
 script = ExtResource("1_ppukc")
