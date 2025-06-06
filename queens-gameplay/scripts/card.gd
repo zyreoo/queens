@@ -17,16 +17,18 @@ var last_request_type := ""
 var player_id := ""
 var http: HTTPRequest
 var last_preview_update := 0.0
-var drag_start_pos := Vector2()
-const DRAG_THRESHOLD := 5.0
+var initial_click_pos := Vector2.ZERO
+var drag_start_time := 0.0
+const DRAG_THRESHOLD := 10.0  # pixels
+const CLICK_THRESHOLD := 0.2  # seconds
 const PREVIEW_UPDATE_INTERVAL := 0.05
+const DRAG_SMOOTHING := 0.3  # Lower = smoother but more laggy
 
 const BASE_URL = "http://localhost:3000/"
 const DEFAULT_TEXTURE_PATH = "res://icon.svg"
 
 @onready var effects = get_node("/root/Main/Effects")
 var original_position: Vector2
-var drag_start_position: Vector2
 var initial_z_index: int
 
 func _ready():
@@ -59,6 +61,81 @@ func _on_pressed():
 		return
 	
 	start_drag()
+
+func _input(event):
+	if !dragging and event is InputEventMouseMotion:
+		if drag_start_time > 0:
+			var distance = get_global_mouse_position().distance_to(initial_click_pos)
+			if distance > DRAG_THRESHOLD:
+				start_drag()
+	
+	if dragging and event is InputEventMouseMotion:
+		var target_pos = get_global_mouse_position() + drag_offset
+		global_position = global_position.lerp(target_pos, DRAG_SMOOTHING)
+		
+		var main_script = get_node("/root/Main")
+		if main_script:
+			var center_slot = main_script.get_node_or_null("GameContainer/CenterCardSlot")
+			if center_slot:
+				var slot_center = center_slot.global_position + (center_slot.size / 2)
+				var card_center = global_position + (size / 2)
+				var distance = card_center.distance_to(slot_center)
+				
+				var current_time = Time.get_ticks_msec() / 1000.0
+				if current_time - last_preview_update >= PREVIEW_UPDATE_INTERVAL:
+					last_preview_update = current_time
+					
+					if distance < 100:
+						var preview_data = card_data.duplicate()
+						preview_data["is_face_up"] = false
+						main_script.update_center_preview(preview_data)
+					else:
+						main_script.clear_center_preview()
+
+func start_drag():
+	if is_center_card or disabled:
+		return
+		
+	var main_script = get_node("/root/Main")
+	if !main_script or !main_script.game_started or main_script.initial_selection_mode:
+		return
+
+	dragging = true
+	original_position = global_position
+	z_index = 100
+	drag_offset = global_position - get_global_mouse_position()
+
+func end_drag():
+	if !dragging:
+		return
+
+	var main_script = get_node("/root/Main")
+	if !main_script:
+		dragging = false
+		z_index = initial_z_index
+		effects.animate_card_move(self, original_position)
+		main_script.clear_center_preview()
+		return
+
+	var can_play_card = false
+	var center_slot = main_script.get_node_or_null("GameContainer/CenterCardSlot")
+	if center_slot:
+		var slot_center = center_slot.global_position + (center_slot.size / 2)
+		var card_center = global_position + (size / 2)
+		var distance = card_center.distance_to(slot_center)
+		if distance < 100:
+			can_play_card = true
+		else:
+			main_script.clear_center_preview()
+	
+	if can_play_card:
+		play_card()
+	else:
+		effects.animate_card_move(self, original_position)
+		main_script.clear_center_preview()
+	
+	dragging = false
+	z_index = initial_z_index
 
 func set_data(data: Dictionary):
 	if data.has("suit"):
@@ -114,72 +191,6 @@ func temporary_reveal():
 	)
 	timer.start()
 
-func _input_event(_viewport, event, _shape_idx):
-	var main_script = get_node("/root/Main")
-	if !main_script:
-		return
-
-	if event is InputEventMouseButton:
-		if event.button_index == MOUSE_BUTTON_LEFT:
-			if event.pressed:
-				if !dragging:
-					start_drag()
-			else:
-				end_drag()
-
-func start_drag():
-	if is_center_card:
-		dragging = false
-		return
-		
-	var main_script = get_node("/root/Main")
-	if !main_script:
-		dragging = false
-		return
-
-	if !main_script.game_started or main_script.initial_selection_mode:
-		dragging = false
-		return
-
-	drag_start_pos = get_global_mouse_position()
-	original_position = global_position
-	z_index = 100
-	dragging = true
-	drag_offset = global_position - drag_start_pos
-
-func end_drag():
-	if drag_start_pos != Vector2.ZERO:
-		drag_start_pos = Vector2.ZERO
-		return
-		
-	if !dragging:
-		return
-
-	var main_script = get_node("/root/Main")
-	if !main_script:
-		dragging = false
-		z_index = initial_z_index
-		effects.animate_card_move(self, original_position)
-		main_script.clear_center_preview()
-		return
-
-	var can_play_card = false
-	var center_slot = get_node("/root/Main/GameContainer/CenterCardSlot")
-	if center_slot:
-		var slot_center = center_slot.global_position + (center_slot.size / 2)
-		var card_center = global_position + (size / 2)
-		var distance = card_center.distance_to(slot_center)
-		if distance < 100:
-			can_play_card = true
-		else:
-			main_script.clear_center_preview()
-	
-	if can_play_card:
-		play_card()
-	else:
-		effects.animate_card_move(self, original_position)
-		main_script.clear_center_preview()
-
 func play_card():
 	var center_slot = get_node("/root/Main/GameContainer/CenterCardSlot")
 	if !center_slot:
@@ -201,67 +212,6 @@ func play_card():
 		main_script.add_to_used_deck(self)
 		
 		queue_free()
-
-func _process(_delta):
-	if !dragging and drag_start_pos != Vector2.ZERO:
-		var current_mouse_pos = get_global_mouse_position()
-		var distance = drag_start_pos.distance_to(current_mouse_pos)
-		if distance > DRAG_THRESHOLD:
-			dragging = true
-			drag_start_pos = Vector2.ZERO
-	elif dragging:
-		var mouse_pos = get_global_mouse_position()
-		var new_pos = mouse_pos + drag_offset
-		global_position = global_position.lerp(new_pos, 0.5)
-		
-		var center_slot = get_node("/root/Main/GameContainer/CenterCardSlot")
-		if center_slot:
-			var slot_center = center_slot.global_position + (center_slot.size / 2)
-			var card_center = global_position + (size / 2)
-			var distance = card_center.distance_to(slot_center)
-			
-			var current_time = Time.get_ticks_msec() / 1000.0
-			if current_time - last_preview_update >= PREVIEW_UPDATE_INTERVAL:
-				last_preview_update = current_time
-				
-				if distance < 100:
-					var main_script = get_node("/root/Main")
-					if main_script:
-						var preview_data = card_data.duplicate()
-						preview_data["is_face_up"] = false  # Keep preview face down
-						main_script.update_center_preview(preview_data)
-				else:
-					var main_script = get_node("/root/Main")
-					if main_script:
-						main_script.clear_center_preview()
-
-func _gui_input(event):
-	if event is InputEventMouseButton:
-		if event.button_index == MOUSE_BUTTON_LEFT:
-			if event.pressed:
-				start_drag()
-			else:
-				if dragging:
-					var center_slot = get_node("/root/Main/GameContainer/CenterCardSlot")
-					if center_slot:
-						var slot_center = center_slot.global_position + (center_slot.size / 2)
-						var card_center = global_position + (size / 2)
-						var distance = card_center.distance_to(slot_center)
-						
-						if distance < 100:
-							var target_pos = slot_center - (size / 2)
-							var main_script = get_node("/root/Main")
-							if main_script:
-								main_script.clear_center_preview()
-								play_card()
-						else:
-							effects.animate_card_move(self, original_position)
-							var main_script = get_node("/root/Main")
-							if main_script:
-								main_script.clear_center_preview()
-					
-					dragging = false
-					z_index = initial_z_index
 
 func add_button_effects_deferred():
 	if self and !is_center_card:

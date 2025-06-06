@@ -62,12 +62,14 @@ func update_hand_display(new_hand: Array, local_player: bool, initial_selection:
 		if local_player:
 			# Always start face down for local player
 			card_node.flip_card(false)
+			card_node.disabled = false  # Make sure cards are enabled for local player
 			if not card_node.pressed.is_connected(_on_card_pressed):
 				card_node.pressed.connect(_on_card_pressed.bind(card_node))
 		else:
 			# For opponent's cards or hidden cards, just show the back
 			card_node.flip_card(false)
 			card_node.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			card_node.disabled = true
 		
 		hand_container.add_child(card_node)
 		cards_added += 1
