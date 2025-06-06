@@ -60,15 +60,10 @@ func update_hand_display(new_hand: Array, local_player: bool, initial_selection:
 		card_node.position.y = (hand_container.size.y - card_height) / 2
 		
 		if local_player:
-			if initial_selection:
-				card_node.flip_card(false)  # Start face down in initial selection
-				if not card_node.pressed.is_connected(_on_card_pressed):
-					card_node.pressed.connect(_on_card_pressed.bind(card_node))
-			else:
-				# Only show face up if not in initial selection and it's the local player
-				card_node.flip_card(true)
-				if not card_node.pressed.is_connected(_on_card_pressed):
-					card_node.pressed.connect(_on_card_pressed.bind(card_node))
+			# Always start face down for local player
+			card_node.flip_card(false)
+			if not card_node.pressed.is_connected(_on_card_pressed):
+				card_node.pressed.connect(_on_card_pressed.bind(card_node))
 		else:
 			# For opponent's cards or hidden cards, just show the back
 			card_node.flip_card(false)

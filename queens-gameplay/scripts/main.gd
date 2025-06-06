@@ -261,8 +261,6 @@ func _on_request_completed(result, response_code, headers, body):
 									for card in hand_container.get_children():
 										card.disabled = (i != current_turn_index)
 										card.modulate = Color(1, 1, 1)
-										if i == player_index:
-											card.flip_card(true)  # Show cards face up for current player
 					else:
 						game_started = false
 						message_label.text = "Waiting for other players..."
@@ -828,10 +826,10 @@ func update_center_preview(card_data: Dictionary):
 			center_card_slot.add_child(preview_card)
 		
 		var preview_data = card_data.duplicate()
-		preview_data["is_face_up"] = true
+		preview_data["is_face_up"] = false
 		
 		preview_card.set_data(preview_data)
-		preview_card.flip_card(true)
+		preview_card.flip_card(false)
 		preview_card.modulate.a = 0.5
 		preview_card.position = Vector2.ZERO
 		preview_card.z_index = 1

@@ -228,7 +228,7 @@ func _process(_delta):
 					var main_script = get_node("/root/Main")
 					if main_script:
 						var preview_data = card_data.duplicate()
-						preview_data["is_face_up"] = true
+						preview_data["is_face_up"] = false  # Keep preview face down
 						main_script.update_center_preview(preview_data)
 				else:
 					var main_script = get_node("/root/Main")
