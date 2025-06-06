@@ -9,6 +9,7 @@ var selected_initial_cards: Array = []
 var card_back_texture = preload("res://assets/card_back-export.png")
 var temporarily_revealed_cards = {}
 var reveal_timers = {}
+var _initial_selected_cards: Array = []
 
 @onready var hand_container = $HandContainer
 
@@ -21,6 +22,7 @@ func _ready():
 func setup_player(index: int, id: String):
 	player_index = index
 	player_id = id
+	_initial_selected_cards.clear()
 	
 	var label = $Label
 	if label:
@@ -85,8 +87,32 @@ func _on_card_pressed(card_node):
 	if not card_node.pressed.is_connected(_on_card_pressed):
 		card_node.pressed.connect(_on_card_pressed.bind(card_node))
 	
-	if initial_selection_complete:
-		initial_selection_complete.emit([card_node.card_data.card_id])
+	if is_initial_selection:
+		# Check if this card was already selected
+		var already_selected = false
+		for selected_card in _initial_selected_cards:
+			if selected_card.card_id == card_node.card_data.card_id:
+				already_selected = true
+				break
+
+		if already_selected:
+			return
+
+		if _initial_selected_cards.size() >= 2:
+			return
+
+		_initial_selected_cards.append(card_node.card_data)
+		card_node.temporary_reveal()
+		
+		if _initial_selected_cards.size() == 2:
+			var card_ids = []
+			for card in _initial_selected_cards:
+				card_ids.append(card.card_id)
+			initial_selection_complete.emit(card_ids)
+			
+			# Disable all cards after selection
+			for card in hand_container.get_children():
+				card.disabled = true
 
 func clear_hand():
 	call_deferred("_deferred_clear_hand_container")
@@ -113,7 +139,7 @@ func remove_card(card_id: String):
 	
 func set_initial_selection_mode(enable: bool):
 	is_initial_selection = enable
-	selected_initial_cards.clear()
+	_initial_selected_cards.clear()
 	update_hand_display(hand, is_local_player, is_initial_selection)
 
 func display_error_card(error_message: String):

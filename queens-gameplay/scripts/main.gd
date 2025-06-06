@@ -60,7 +60,7 @@ func _ready():
 	player_id = "%d_%d" % [timestamp, random_num]
 	
 	add_child(poll_timer)
-	poll_timer.wait_time = 1.0
+	poll_timer.wait_time = 2.0
 	poll_timer.timeout.connect(fetch_state)
 	
 	room_update_timer = Timer.new()
@@ -143,8 +143,6 @@ func join_game(selected_room_id: String = ""):
 		
 	if is_request_in_progress:
 		return
-		
-	print("[JOIN GAME] Attempting to join room:", room_id)
 	
 	effects.animate_text_fade(message_label, "Joining room...")
 	$MenuContainer.visible = false
@@ -164,7 +162,6 @@ func join_game(selected_room_id: String = ""):
 	if player_id != "":
 		body_dict["player_id"] = player_id
 	var body = JSON.stringify(body_dict)
-	print("[JOIN GAME] Sending request with player_id:", player_id)
 	http.request(url, headers, HTTPClient.METHOD_POST, body)
 
 func _on_queens_pressed():
@@ -196,6 +193,14 @@ func _on_request_completed(result, response_code, headers, body):
 	if json.has("status") and json.status == "error":
 		if json.has("message"):
 			message_label.text = json.message
+			if last_request_type == "select_initial_cards":
+				_initial_selected_cards.clear()
+				var player_node = $GameContainer/BottomPlayerContainer.get_node_or_null("Player%d" % player_index)
+				if is_instance_valid(player_node):
+					var hand_container = player_node.get_node("HandContainer")
+					if hand_container:
+						for card in hand_container.get_children():
+							card.disabled = false
 		return
 
 	match last_request_type:
@@ -257,7 +262,7 @@ func _on_request_completed(result, response_code, headers, body):
 										card.disabled = (i != current_turn_index)
 										card.modulate = Color(1, 1, 1)
 										if i == player_index:
-											card.flip_card(false)
+											card.flip_card(true)  # Show cards face up for current player
 					else:
 						game_started = false
 						message_label.text = "Waiting for other players..."
@@ -404,8 +409,17 @@ func _on_initial_selection_complete(selected_card_ids: Array):
 		"player_index": player_index,
 		"selected_card_ids": selected_card_ids
 	})
+	
+	# Disable all cards while waiting for server response
+	var player_node = $GameContainer/BottomPlayerContainer.get_node_or_null("Player%d" % player_index)
+	if is_instance_valid(player_node):
+		var hand_container = player_node.get_node("HandContainer")
+		if hand_container:
+			for card in hand_container.get_children():
+				card.disabled = true
+	
+	message_label.text = "Sending initial card selection..."
 	http.request(url, headers, HTTPClient.METHOD_POST, body)
-	message_label.text = "Initial cards selected! Waiting for other players..."
 
 func fetch_state():
 	if not has_joined or room_id.is_empty() or player_id.is_empty():
@@ -474,7 +488,6 @@ func _on_state_request_completed(result: int, response_code: int, headers: Packe
 	if timeout_timer:
 		timeout_timer.queue_free()
 	
-	# Disconnect this specific completion handler
 	if http.request_completed.is_connected(_on_state_request_completed):
 		http.request_completed.disconnect(_on_state_request_completed)
 	
@@ -544,7 +557,16 @@ func process_state_response(json: Dictionary):
 		return
 		
 	if json.has("initial_selection_mode"):
+		var old_mode = initial_selection_mode
 		initial_selection_mode = json.initial_selection_mode
+		if old_mode != initial_selection_mode:
+			if initial_selection_mode:
+				message_label.text = "Select your initial two cards"
+				_initial_selected_cards.clear()
+				poll_timer.wait_time = 1.0  # Faster polling during initial selection
+			else:
+				poll_timer.wait_time = 2.0  # Normal polling after initial selection
+				
 	if json.has("total_players"):
 		total_players = json.total_players
 	
@@ -747,6 +769,9 @@ func send_initial_cards_selection(selected_cards_data: Array):
 	if room_id.is_empty() or player_id.is_empty():
 		return
 
+	if selected_cards_data.size() != 2:
+		return
+
 	is_request_in_progress = true
 	last_request_type = "select_initial_cards"
 	var url = BASE_URL + "select_initial_cards"
@@ -906,10 +931,6 @@ func _on_card_pressed(card_node):
 		if not is_instance_valid(player_node) or card_node.holding_player != player_node:
 			return
 
-		if _initial_selected_cards.size() >= 2:
-			message_label.text = "You have already selected your two cards!"
-			return
-
 		var card_data = card_node.card_data
 		if card_data.has("was_initially_seen") and card_data.was_initially_seen:
 			return
@@ -920,25 +941,27 @@ func _on_card_pressed(card_node):
 		if card_data.is_locked:
 			return
 
-		# Lock all cards during reveal
-		for card in player_node.get_node("HandContainer").get_children():
-			card.card_data["is_locked"] = true
-
-		# Temporarily reveal the card
-		card_node.temporary_reveal()
-
-		# Check if this card was already selected
 		var already_selected = false
 		for selected_card in _initial_selected_cards:
 			if selected_card.card_id == card_data.card_id:
 				already_selected = true
 				break
 
-		if not already_selected:
-			_initial_selected_cards.append(card_data)
-			message_label.text = "Select %d more card(s)" % (2 - _initial_selected_cards.size())
+		if already_selected:
+			return
 
-			if _initial_selected_cards.size() == 2:
+		if _initial_selected_cards.size() >= 2:
+			message_label.text = "You have already selected your two cards!"
+			return
+
+		card_node.temporary_reveal()
+		
+		_initial_selected_cards.append(card_data)
+		
+		if _initial_selected_cards.size() < 2:
+			message_label.text = "Select %d more card(s)" % (2 - _initial_selected_cards.size())
+		else:
+			if not is_request_in_progress:
 				send_initial_cards_selection(_initial_selected_cards)
 				message_label.text = "Initial cards selected! Wait for other players."
 				for card in player_node.get_node("HandContainer").get_children():
