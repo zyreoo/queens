@@ -17,7 +17,7 @@ signal initial_selection_complete(selected_card_ids)
 
 func _ready():
 	if not hand_container:
-		push_error("HandContainer not found in _ready!")
+		return
 
 func setup_player(index: int, id: String):
 	player_index = index
@@ -30,7 +30,6 @@ func setup_player(index: int, id: String):
 
 func update_hand_display(new_hand: Array, local_player: bool, initial_selection: bool):
 	if not is_instance_valid(hand_container):
-		push_error("Error: Hand container not found")
 		return
 	
 	for child in hand_container.get_children():
@@ -50,7 +49,6 @@ func update_hand_display(new_hand: Array, local_player: bool, initial_selection:
 	for card_data in new_hand:
 		var card_node = preload("res://scenes/card.tscn").instantiate()
 		if not card_node:
-			push_error("Error: Failed to instantiate card scene")
 			continue
 		
 		card_node.holding_player = self
@@ -60,13 +58,11 @@ func update_hand_display(new_hand: Array, local_player: bool, initial_selection:
 		card_node.position.y = (hand_container.size.y - card_height) / 2
 		
 		if local_player:
-			# Always start face down for local player
 			card_node.flip_card(false)
-			card_node.disabled = false  # Make sure cards are enabled for local player
+			card_node.disabled = false
 			if not card_node.pressed.is_connected(_on_card_pressed):
 				card_node.pressed.connect(_on_card_pressed.bind(card_node))
 		else:
-			# For opponent's cards or hidden cards, just show the back
 			card_node.flip_card(false)
 			card_node.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			card_node.disabled = true
@@ -85,7 +81,6 @@ func _on_card_pressed(card_node):
 		card_node.pressed.connect(_on_card_pressed.bind(card_node))
 	
 	if is_initial_selection:
-		# Check if this card was already selected
 		var already_selected = false
 		for selected_card in _initial_selected_cards:
 			if selected_card.card_id == card_node.card_data.card_id:
@@ -107,7 +102,6 @@ func _on_card_pressed(card_node):
 				card_ids.append(card.card_id)
 			initial_selection_complete.emit(card_ids)
 			
-			# Disable all cards after selection
 			for card in hand_container.get_children():
 				card.disabled = true
 

@@ -40,6 +40,8 @@ var king_player_index := -1
 var jack_player_index := -1
 var queens_player_index := -1
 var MAX_PLAYERS = 4
+var is_showing_drawn_card := false
+var received_first_turn_card := false
 
 const BASE_URL = "http://localhost:3000/"
 
@@ -54,7 +56,6 @@ func _ready():
 		join_game()
 		return
 		
-	# Always generate a new unique player_id
 	var timestamp = Time.get_unix_time_from_system()
 	var random_num = randi() % 1000000
 	player_id = "%d_%d" % [timestamp, random_num]
@@ -575,25 +576,23 @@ func reinitialize_game_state():
 
 func process_state_response(json: Dictionary):
 	if not json:
-		push_error("Error: Empty state response")
 		return
 		
 	if json.has("error"):
-		push_error("Error from server: " + str(json.error))
 		return
 
-	if json.has("current_turn_index"):
-		var old_turn_index = current_turn_index
-		current_turn_index = int(json.current_turn_index)
-		
-		if old_turn_index != current_turn_index:
-			if not initial_selection_mode and game_started:  # Only handle turns if game has started
-				if current_turn_index == player_index:
-					start_turn_sequence()
-				else:
-					message_label.text = "Opponent's turn!"
-				update_card_states()
-	
+	if is_showing_drawn_card:
+		return
+
+	if json.has("game_started"):
+		var old_game_started = game_started
+		game_started = json.game_started
+		if old_game_started != game_started:
+			if game_started:
+				queens_button.visible = true
+				message_label.text = "Game started!"
+				received_first_turn_card = false
+
 	if json.has("initial_selection_mode"):
 		var old_mode = initial_selection_mode
 		initial_selection_mode = json.initial_selection_mode
@@ -601,26 +600,28 @@ func process_state_response(json: Dictionary):
 			if initial_selection_mode:
 				message_label.text = "Select your initial two cards"
 				_initial_selected_cards.clear()
-				poll_timer.wait_time = 1.0  # Faster polling during initial selection
+				poll_timer.wait_time = 1.0
 			else:
-				# Initial selection is complete, transition to main game
-				poll_timer.wait_time = 2.0  # Normal polling after initial selection
-				game_started = true
-				queens_button.visible = true
-				message_label.text = "Game started!"
-				
-				# Enable/disable cards based on turn
+				poll_timer.wait_time = 2.0
+				if json.has("first_turn_card") and json.first_turn_card != null:
+					received_first_turn_card = true
+
+	if json.has("current_turn_index"):
+		var old_turn_index = current_turn_index
+		current_turn_index = int(json.current_turn_index)
+		
+		if old_turn_index != current_turn_index:
+			if not initial_selection_mode and game_started:
+				if current_turn_index == player_index:
+					start_turn_sequence()
+				else:
+					message_label.text = "Opponent's turn!"
 				update_card_states()
-				
+
 	if json.has("total_players"):
 		total_players = json.total_players
 	
-	if json.has("game_started"):
-		game_started = json.game_started
-		if game_started:
-			queens_button.visible = true
-	
-	if json.has("players"):
+	if json.has("players") and not is_showing_drawn_card:
 		for p_data in json.players:
 			if not p_data.has("index"):
 				continue
@@ -632,7 +633,6 @@ func process_state_response(json: Dictionary):
 			var container_name = "BottomPlayerContainer" if p_index == player_index else "TopPlayerContainer"
 			var container = $GameContainer.get_node_or_null(container_name)
 			if not container:
-				push_error("Container not found: " + container_name)
 				continue
 			
 			var player_node = container.get_node_or_null("Player%d" % p_index)
@@ -642,7 +642,6 @@ func process_state_response(json: Dictionary):
 				player_node = container.get_node_or_null("Player%d" % p_index)
 				
 				if not is_instance_valid(player_node):
-					push_error("Failed to create player node after ensure_player_nodes")
 					continue
 			
 			if p_data.has("hand"):
@@ -653,7 +652,7 @@ func process_state_response(json: Dictionary):
 						if typeof(card) == TYPE_DICTIONARY and card.has("card_id"):
 							var card_data = {
 								"card_id": card.card_id,
-								"is_face_up": p_index == player_index,
+								"is_face_up": false,
 								"rank": card.rank if card.has("rank") else "0",
 								"suit": card.suit if card.has("suit") else "Unknown",
 								"value": float(card.rank) if card.has("rank") else 0.0
@@ -662,12 +661,6 @@ func process_state_response(json: Dictionary):
 					
 					if processed_hand.size() > 0:
 						player_node.update_hand_display(processed_hand, p_index == player_index, initial_selection_mode)
-					else:
-						push_warning("Warning: No valid cards processed for player " + str(p_index))
-				else:
-					push_warning("Warning: Invalid hand data type for player " + str(p_index))
-			else:
-				push_warning("Warning: No hand data for player " + str(p_index))
 	
 	if json.has("center_card") and not initial_selection_mode:
 		show_center_card(json.center_card)
@@ -1027,9 +1020,14 @@ func start_turn_sequence():
 		message_label.text = "Select your initial two cards"
 		return
 		
+	if received_first_turn_card:
+		received_first_turn_card = false
+		message_label.text = "Your turn! Play a card."
+		update_card_states()
+		return
+	
 	message_label.text = "Your turn! Drawing a card..."
 	
-	# Request a new card from the server
 	if is_request_in_progress:
 		return
 
@@ -1044,6 +1042,9 @@ func start_turn_sequence():
 	http.request(url, headers, HTTPClient.METHOD_POST, body)
 
 func handle_drawn_card(card_data: Dictionary):
+	if not card_data.has("rank") or not card_data.has("suit"):
+		return
+		
 	var player_node = $GameContainer.get_node_or_null("BottomPlayerContainer/Player%d" % player_index)
 	if not is_instance_valid(player_node):
 		return
@@ -1051,33 +1052,33 @@ func handle_drawn_card(card_data: Dictionary):
 	var hand_container = player_node.get_node("HandContainer")
 	if not hand_container:
 		return
-		
-	# Create new card node
-	var card_node = preload("res://scenes/card.tscn").instantiate()
-	if not card_node:
+	
+	var preview_card = preload("res://scenes/card.tscn").instantiate()
+	if not preview_card:
 		return
 		
-	card_node.holding_player = player_node
-	card_node.set_data(card_data)
+	preview_card.holding_player = player_node
+	preview_card.set_data(card_data)
+	preview_card.flip_card(true)
+	preview_card.disabled = true
+	preview_card.modulate = Color(1, 1, 0.7)
+	preview_card.name = "DrawnCardPreview"
 	
-	# Add to hand container
-	hand_container.add_child(card_node)
+	preview_card.position = Vector2(get_viewport().size.x / 2 - preview_card.size.x / 2, 
+								  get_viewport().size.y / 2 - preview_card.size.y / 2)
+	add_child(preview_card)
 	
-	# Show card face up temporarily
-	card_node.flip_card(true)
-	card_node.disabled = true
+	is_showing_drawn_card = true
 	
-	# Create timer for flipping back
 	var timer = Timer.new()
 	add_child(timer)
-	timer.wait_time = 3.0
+	timer.wait_time = 2.0
 	timer.one_shot = true
 	timer.timeout.connect(func():
-		if is_instance_valid(card_node):
-			card_node.flip_card(false)
-			card_node.disabled = false
-			message_label.text = "Your turn! Play a card."
-			update_card_states()
+		if is_instance_valid(preview_card):
+			preview_card.queue_free()
+		is_showing_drawn_card = false
+		message_label.text = "Your turn! Play a card."
 		timer.queue_free()
 	)
 	timer.start()
