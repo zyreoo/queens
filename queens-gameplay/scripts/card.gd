@@ -22,7 +22,7 @@ var drag_start_time := 0.0
 const DRAG_THRESHOLD := 10.0  # pixels
 const CLICK_THRESHOLD := 0.2  # seconds
 const PREVIEW_UPDATE_INTERVAL := 0.05
-const DRAG_SMOOTHING := 0.3  # Lower = smoother but more laggy
+const DRAG_SMOOTHING := 0.5  # Increased for more responsive dragging
 
 const BASE_URL = "http://localhost:3000/"
 const DEFAULT_TEXTURE_PATH = "res://icon.svg"
@@ -60,18 +60,27 @@ func _on_pressed():
 				main_script._on_card_pressed(self)
 		return
 	
-	start_drag()
+	# Only start dragging if no other card is being dragged
+	if !is_any_card_dragging():
+		start_drag()
 
 func _input(event):
+	if event is InputEventMouseButton:
+		if event.button_index == MOUSE_BUTTON_LEFT:
+			if !event.pressed and dragging:
+				end_drag()
+	
 	if !dragging and event is InputEventMouseMotion:
 		if drag_start_time > 0:
 			var distance = get_global_mouse_position().distance_to(initial_click_pos)
 			if distance > DRAG_THRESHOLD:
-				start_drag()
+				if !is_any_card_dragging():
+					start_drag()
 	
 	if dragging and event is InputEventMouseMotion:
 		var target_pos = get_global_mouse_position() + drag_offset
-		global_position = global_position.lerp(target_pos, DRAG_SMOOTHING)
+		# Direct position update for more responsive dragging
+		global_position = target_pos
 		
 		var main_script = get_node("/root/Main")
 		if main_script:
@@ -92,6 +101,25 @@ func _input(event):
 					else:
 						main_script.clear_center_preview()
 
+func is_any_card_dragging() -> bool:
+	var main_script = get_node("/root/Main")
+	if !main_script:
+		return false
+		
+	for container_name in ["BottomPlayerContainer", "TopPlayerContainer"]:
+		var container = main_script.get_node_or_null("GameContainer/" + container_name)
+		if container:
+			for player in container.get_children():
+				var hand_container = player.get_node_or_null("HandContainer")
+				if hand_container:
+					for card in hand_container.get_children():
+						if card != self and card.has_method("is_dragging") and card.is_dragging():
+							return true
+	return false
+
+func is_dragging() -> bool:
+	return dragging
+
 func start_drag():
 	if is_center_card or disabled:
 		return
@@ -104,6 +132,7 @@ func start_drag():
 	original_position = global_position
 	z_index = 100
 	drag_offset = global_position - get_global_mouse_position()
+	initial_click_pos = get_global_mouse_position()
 
 func end_drag():
 	if !dragging:
@@ -136,6 +165,7 @@ func end_drag():
 	
 	dragging = false
 	z_index = initial_z_index
+	drag_start_time = 0.0
 
 func set_data(data: Dictionary):
 	if data.has("suit"):
