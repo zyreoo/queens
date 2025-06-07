@@ -279,7 +279,7 @@ func _on_request_completed(result, response_code, headers, body):
 						current_turn_index = int(json.current_turn_index)
 						queens_button.visible = true
 						
-						if json.has("first_turn_card"):
+						if json.has("first_turn_card") and json.first_turn_card != null and player_index == 0:
 							var player_node = $GameContainer/BottomPlayerContainer.get_node_or_null("Player%d" % player_index)
 							if is_instance_valid(player_node):
 								var card_node = preload("res://scenes/card.tscn").instantiate()
