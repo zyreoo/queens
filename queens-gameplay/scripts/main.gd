@@ -1060,8 +1060,6 @@ func _on_card_pressed(card_node):
 			return
 
 		card_node.temporary_reveal()
-		card_node.modulate = Color(0.7, 1.0, 0.7)  # Visual feedback for selection
-		
 		_initial_selected_cards.append(card_data)
 		
 		if _initial_selected_cards.size() < 2:
@@ -1121,49 +1119,52 @@ func handle_drawn_card(card_data: Dictionary):
 	preview_card.set_data(card_data)
 	preview_card.flip_card(true)
 	preview_card.disabled = true
-	preview_card.modulate = Color(1, 1, 0.7)
 	preview_card.name = "DrawnCardPreview"
 	
 	var card_width = 100
 	var card_height = 150
 	var card_spacing = 20
-	var current_hand_size = hand_container.get_child_count()
-	var total_width = (card_width + card_spacing) * (current_hand_size + 1) - card_spacing
-	var start_x = (hand_container.size.x - total_width) / 2
-	var final_x = start_x + (card_width + card_spacing) * current_hand_size
+	
+	# Calculate the final position - always on the right side
+	var final_x = hand_container.position.x + hand_container.size.x - card_width - 20  # 20px margin from right
 	var final_y = hand_container.position.y + (hand_container.size.y - card_height) / 2
 	
+	# Start position - center of screen but slightly higher
 	var viewport_size = get_viewport().size
 	preview_card.size = Vector2(card_width, card_height)
 	preview_card.position = Vector2(
 		(viewport_size.x - card_width) / 2,
-		(viewport_size.y - card_height) / 2
+		(viewport_size.y - card_height) / 2 - 100  # Start higher up
 	)
 	preview_card.z_index = 101
 	
 	add_child(preview_card)
 	is_showing_drawn_card = true
 	
-	var target_highlight = ColorRect.new()
-	target_highlight.color = Color(1, 1, 0, 0.3)
-	target_highlight.size = Vector2(card_width, card_height)
-	target_highlight.position = Vector2(final_x, final_y)
-	hand_container.add_child(target_highlight)
-	
+	# Create the animation sequence
 	var tween = create_tween()
 	tween.set_trans(Tween.TRANS_CUBIC)
 	tween.set_ease(Tween.EASE_OUT)
 	
-	tween.tween_property(preview_card, "position:y", preview_card.position.y - 50, 0.3)
+	# First move up slightly with a small pause
+	tween.tween_property(preview_card, "position:y", preview_card.position.y - 30, 0.3)
 	tween.tween_interval(0.5)
 	
-	tween.tween_property(preview_card, "position", Vector2(final_x, final_y), 0.5)
+	# Create arc movement
+	tween.tween_method(
+		func(t: float):
+			var start = preview_card.position
+			var end = Vector2(final_x, final_y)
+			var arc_pos = start.lerp(end, t)
+			arc_pos.y -= sin(t * PI) * 100  # Add arc movement
+			preview_card.position = arc_pos,
+		0.0, 1.0, 0.8
+	)
 	
+	# Final cleanup and card creation
 	tween.tween_callback(func():
 		if is_instance_valid(preview_card):
 			preview_card.queue_free()
-		if is_instance_valid(target_highlight):
-			target_highlight.queue_free()
 		is_showing_drawn_card = false
 		message_label.text = "Your turn! Play a card."
 		
@@ -1175,9 +1176,11 @@ func handle_drawn_card(card_data: Dictionary):
 		new_card.flip_card(false)
 		hand_container.add_child(new_card)
 		
-		var flash_tween = create_tween()
-		flash_tween.tween_property(new_card, "modulate", Color(1, 1, 0.7), 0.3)
-		flash_tween.tween_property(new_card, "modulate", Color(1, 1, 1), 0.3)
+		# Add a nice "pop" effect when the card appears
+		new_card.scale = Vector2(0.8, 0.8)
+		var appear_tween = create_tween()
+		appear_tween.tween_property(new_card, "scale", Vector2(1.1, 1.1), 0.2)
+		appear_tween.tween_property(new_card, "scale", Vector2(1.0, 1.0), 0.1)
 	)
 
 func apply_custom_font(node: Node, font: Font):

@@ -209,6 +209,7 @@ func temporary_reveal():
 	disabled = true
 	flip_card(true)
 	card_data.was_initially_seen = true
+	modulate = Color(1, 1, 1)  # Ensure no color tint
 	
 	var timer = Timer.new()
 	add_child(timer)
@@ -217,6 +218,7 @@ func temporary_reveal():
 	timer.timeout.connect(func():
 		flip_card(false)
 		disabled = false
+		modulate = Color(1, 1, 1)  # Ensure no color tint after flip
 		timer.queue_free()
 	)
 	timer.start()
