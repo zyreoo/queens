@@ -50,7 +50,38 @@ var game_started := false
 var countdown := 0
 var used_deck: Array = []
 
+# Add animation variables at the top of the file
+var animation_time: float = 0.0
+const ANIMATION_SPEED: float = 2.0  # Speed of the wave
+const ANIMATION_AMPLITUDE: float = 10.0  # Height of the wave
+
 func _ready():
+	# Start card animation timer
+	var animation_timer = Timer.new()
+	animation_timer.name = "CardAnimationTimer"
+	animation_timer.wait_time = 0.016  # ~60 FPS
+	animation_timer.timeout.connect(_update_card_animations)
+	add_child(animation_timer)
+	animation_timer.start()
+	
+	# Setup custom font
+	var custom_font = load("res://assets/font/m6x11.ttf")
+	if custom_font:
+		apply_custom_font($MenuContainer, custom_font)
+		apply_custom_font($GameContainer, custom_font)
+	
+	# Center menu container
+	var menu_container = $MenuContainer
+	if menu_container:
+		var viewport_size = get_viewport().size
+		var menu_size = Vector2(400, 300)
+		menu_container.size = menu_size
+		menu_container.custom_minimum_size = menu_size
+		menu_container.position = Vector2(
+			(viewport_size.x - menu_size.x) / 2,
+			(viewport_size.y - menu_size.y) / 2
+		)
+	
 	if RoomState.room_id != "":
 		room_id = RoomState.room_id
 		join_game()
@@ -332,9 +363,21 @@ func show_center_card(card_data: Dictionary):
 		card_node.mouse_default_cursor_shape = Control.CURSOR_ARROW
 		card_node.is_center_card = true
 		card_node.position = Vector2.ZERO
+		card_node.z_index = 3
 		center_card_slot.add_child(card_node)
 	
 	center_card = card_data.duplicate()
+
+func update_center_card_slot_position():
+	if center_card_slot:
+		var viewport_size = get_viewport().size
+		var slot_size = Vector2(100, 150)  # Standard card size
+		center_card_slot.size = slot_size
+		center_card_slot.custom_minimum_size = slot_size
+		center_card_slot.position = Vector2(
+			(viewport_size.x - slot_size.x) / 2,
+			(viewport_size.y - slot_size.y) / 2
+		)
 
 func ensure_player_nodes():
 	var bottom_container = $GameContainer.get_node_or_null("BottomPlayerContainer")
@@ -348,13 +391,28 @@ func ensure_player_nodes():
 		push_error("Error: Top container not found")
 		return
 	
-	bottom_container.size = Vector2(1000, 250)
-	bottom_container.custom_minimum_size = Vector2(1000, 250)
-	bottom_container.position = Vector2(50, 500)
+	var viewport_size = get_viewport().size
+	var container_width = 1000
+	var container_height = 250
 	
-	top_container.size = Vector2(1000, 250)
-	top_container.custom_minimum_size = Vector2(1000, 250)
-	top_container.position = Vector2(50, 50)
+	bottom_container.size = Vector2(container_width, container_height)
+	bottom_container.custom_minimum_size = Vector2(container_width, container_height)
+	bottom_container.position = Vector2(
+		(viewport_size.x - container_width) / 2,
+		viewport_size.y - container_height - 50
+	)
+	bottom_container.z_index = 2
+	
+	top_container.size = Vector2(container_width, container_height)
+	top_container.custom_minimum_size = Vector2(container_width, container_height)
+	top_container.position = Vector2(
+		(viewport_size.x - container_width) / 2,
+		50
+	)
+	top_container.z_index = 2
+	
+	if center_card_slot:
+		center_card_slot.z_index = 3
 	
 	for child in bottom_container.get_children():
 		child.queue_free()
@@ -416,6 +474,8 @@ func ensure_player_nodes():
 	
 	top_container.visible = true
 	top_container.modulate = Color(1, 1, 1)
+	
+	update_center_card_slot_position()
 	
 	await get_tree().process_frame
 
@@ -879,7 +939,7 @@ func update_center_preview(card_data: Dictionary):
 		preview_card.flip_card(false)
 		preview_card.modulate.a = 0.5
 		preview_card.position = Vector2.ZERO
-		preview_card.z_index = 1
+		preview_card.z_index = 4
 
 func clear_center_preview():
 	if center_card_slot:
@@ -1064,8 +1124,16 @@ func handle_drawn_card(card_data: Dictionary):
 	preview_card.modulate = Color(1, 1, 0.7)
 	preview_card.name = "DrawnCardPreview"
 	
-	preview_card.position = Vector2(get_viewport().size.x / 2 - preview_card.size.x / 2, 
-								  get_viewport().size.y / 2 - preview_card.size.y / 2)
+	# Center the preview card
+	var viewport_size = get_viewport().size
+	var card_size = Vector2(100, 150)  # Standard card size
+	preview_card.size = card_size
+	preview_card.position = Vector2(
+		(viewport_size.x - card_size.x) / 2,
+		(viewport_size.y - card_size.y) / 2
+	)
+	preview_card.z_index = 101  # Ensure it's above all other elements
+	
 	add_child(preview_card)
 	
 	is_showing_drawn_card = true
@@ -1082,3 +1150,35 @@ func handle_drawn_card(card_data: Dictionary):
 		timer.queue_free()
 	)
 	timer.start()
+
+func apply_custom_font(node: Node, font: Font):
+	if node is Label or node is Button:
+		node.add_theme_font_override("font", font)
+	
+	for child in node.get_children():
+		apply_custom_font(child, font)
+
+func _update_card_animations():
+	animation_time += 0.016  # Increment time
+	
+	# Update cards in both containers
+	for container_name in ["BottomPlayerContainer", "TopPlayerContainer"]:
+		var container = $GameContainer.get_node_or_null(container_name)
+		if container:
+			for player in container.get_children():
+				var hand_container = player.get_node_or_null("HandContainer")
+				if hand_container:
+					var card_index = 0
+					for card in hand_container.get_children():
+						if card is TextureButton:  # Only animate cards
+							var phase = animation_time * ANIMATION_SPEED + card_index * 0.5
+							var offset = sin(phase) * ANIMATION_AMPLITUDE
+							
+							# Store original position if not already stored
+							if not card.has_meta("original_y"):
+								card.set_meta("original_y", card.position.y)
+							
+							# Update position with sine wave offset
+							var original_y = card.get_meta("original_y")
+							card.position.y = original_y + offset
+						card_index += 1
