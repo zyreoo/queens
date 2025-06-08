@@ -228,7 +228,6 @@ func send_heartbeat(filepath: String, is_write: bool) -> void:
 	var file = filepath
 	if scene_mode:
 		file = last_file_path
-		#print("\n-------SCENE MODE--------\n")
 		
 	# Create heartbeat
 	var heartbeat = HeartBeat.new(file, Time.get_unix_time_from_system(), is_write)
@@ -332,7 +331,6 @@ func update_today_time(wakatime_cli) -> void:
 		current_time = convert_time(output[0])
 	else:
 		current_time = "Wakatime"
-	#print(current_time)
 	call_deferred("_update_panel_label", current_time, output[0])
 	
 func _update_panel_label(label: String, content: String):

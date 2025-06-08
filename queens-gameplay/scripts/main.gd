@@ -50,27 +50,23 @@ var game_started := false
 var countdown := 0
 var used_deck: Array = []
 
-# Add animation variables at the top of the file
 var animation_time: float = 0.0
-const ANIMATION_SPEED: float = 2.0  # Speed of the wave
-const ANIMATION_AMPLITUDE: float = 10.0  # Height of the wave
+const ANIMATION_SPEED: float = 2.0
+const ANIMATION_AMPLITUDE: float = 10.0
 
 func _ready():
-	# Start card animation timer
 	var animation_timer = Timer.new()
 	animation_timer.name = "CardAnimationTimer"
-	animation_timer.wait_time = 0.016  # ~60 FPS
+	animation_timer.wait_time = 0.016
 	animation_timer.timeout.connect(_update_card_animations)
 	add_child(animation_timer)
 	animation_timer.start()
 	
-	# Setup custom font
 	var custom_font = load("res://assets/font/m6x11.ttf")
 	if custom_font:
 		apply_custom_font($MenuContainer, custom_font)
 		apply_custom_font($GameContainer, custom_font)
 	
-	# Center menu container
 	var menu_container = $MenuContainer
 	if menu_container:
 		var viewport_size = get_viewport().size
@@ -346,6 +342,8 @@ func update_player_hand(for_player_index: int, hand_data: Array):
 			push_error("Error: Player node not found")
 			return
 	
+	if for_player_index == player_index:
+		player_node.set_initial_selection_mode(initial_selection_mode)
 	player_node.update_hand_display(hand_data, for_player_index == player_index, initial_selection_mode)
 
 func show_center_card(card_data: Dictionary):
@@ -371,7 +369,7 @@ func show_center_card(card_data: Dictionary):
 func update_center_card_slot_position():
 	if center_card_slot:
 		var viewport_size = get_viewport().size
-		var slot_size = Vector2(100, 150)  # Standard card size
+		var slot_size = Vector2(100, 150)
 		center_card_slot.size = slot_size
 		center_card_slot.custom_minimum_size = slot_size
 		center_card_slot.position = Vector2(
@@ -497,7 +495,6 @@ func _on_initial_selection_complete(selected_card_ids: Array):
 		"selected_card_ids": selected_card_ids
 	})
 	
-	# Disable all cards while waiting for server response
 	var player_node = $GameContainer/BottomPlayerContainer.get_node_or_null("Player%d" % player_index)
 	if is_instance_valid(player_node):
 		var hand_container = player_node.get_node("HandContainer")
@@ -532,17 +529,15 @@ func fetch_state():
 		"Access-Control-Allow-Origin: *"
 	]
 	
-	# Create a timeout timer that will be cleaned up after use
 	var timeout_timer = Timer.new()
 	timeout_timer.name = "StateRequestTimer"
 	add_child(timeout_timer)
-	timeout_timer.wait_time = 10.0  # Increased timeout to 10 seconds
+	timeout_timer.wait_time = 10.0
 	timeout_timer.one_shot = true
 	timeout_timer.timeout.connect(func():
 		if is_request_in_progress and last_request_type == "state":
 			push_error("Error: State fetch request timed out")
 			is_request_in_progress = false
-			# Retry the request after a short delay
 			var retry_timer = Timer.new()
 			add_child(retry_timer)
 			retry_timer.wait_time = 2.0
@@ -555,7 +550,6 @@ func fetch_state():
 		timeout_timer.queue_free()
 	)
 	
-	# Connect to request completion to cleanup timer
 	if not http.request_completed.is_connected(_on_state_request_completed):
 		http.request_completed.connect(_on_state_request_completed)
 	
@@ -570,7 +564,6 @@ func fetch_state():
 	timeout_timer.start()
 
 func _on_state_request_completed(result: int, response_code: int, headers: PackedStringArray, body: PackedByteArray):
-	# Clean up the timeout timer if it exists
 	var timeout_timer = get_node_or_null("StateRequestTimer")
 	if timeout_timer:
 		timeout_timer.queue_free()
@@ -578,7 +571,6 @@ func _on_state_request_completed(result: int, response_code: int, headers: Packe
 	if http.request_completed.is_connected(_on_state_request_completed):
 		http.request_completed.disconnect(_on_state_request_completed)
 	
-	# Process the response
 	is_request_in_progress = false
 	
 	if result != HTTPRequest.RESULT_SUCCESS:
@@ -744,21 +736,17 @@ func display_container_error(container: Node, error_message: String):
 	if not container:
 		return
 		
-	# Create error label
 	var error_label = Label.new()
 	error_label.text = "Error: " + error_message
-	error_label.modulate = Color(1, 0, 0)  # Red color
+	error_label.modulate = Color(1, 0, 0)
 	error_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	container.add_child(error_label)
 	
-	# Create error background
 	var error_bg = ColorRect.new()
 	error_bg.custom_minimum_size = Vector2(200, 50)
-	error_bg.color = Color(0.8, 0, 0, 0.3)  # Semi-transparent red
+	error_bg.color = Color(0.8, 0, 0, 0.3)
 	error_bg.show_behind_parent = true
 	container.add_child(error_bg)
-	
-
 
 func _on_room_selected(idx):
 	if room_list:
@@ -1202,7 +1190,7 @@ func _update_card_animations():
 				if hand_container:
 					var card_index = 0
 					for card in hand_container.get_children():
-						if card is TextureButton:  # Only animate cards
+						if card is TextureButton and not card.is_dragging:  # Skip cards that are being dragged
 							var phase = animation_time * ANIMATION_SPEED + card_index * 0.5
 							var offset = sin(phase) * ANIMATION_AMPLITUDE
 							

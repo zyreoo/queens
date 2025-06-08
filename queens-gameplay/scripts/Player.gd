@@ -22,6 +22,7 @@ func _ready():
 func setup_player(index: int, id: String):
 	player_index = index
 	player_id = id
+	is_local_player = (id != "")
 	_initial_selected_cards.clear()
 	
 	var label = $Label
@@ -31,6 +32,9 @@ func setup_player(index: int, id: String):
 func update_hand_display(new_hand: Array, local_player: bool, initial_selection: bool):
 	if not is_instance_valid(hand_container):
 		return
+	
+	is_initial_selection = initial_selection
+	is_local_player = local_player
 	
 	for child in hand_container.get_children():
 		child.queue_free()
@@ -53,57 +57,65 @@ func update_hand_display(new_hand: Array, local_player: bool, initial_selection:
 		
 		card_node.holding_player = self
 		card_node.set_data(card_data)
+		
 		card_node.size = Vector2(card_width, card_height)
 		card_node.position.x = start_x + (card_width + card_spacing) * cards_added
 		card_node.position.y = (hand_container.size.y - card_height) / 2
 		
 		if local_player:
-			card_node.flip_card(false)
-			card_node.disabled = false
-			if not card_node.pressed.is_connected(_on_card_pressed):
-				card_node.pressed.connect(_on_card_pressed.bind(card_node))
+			if initial_selection:
+				var was_selected = false
+				for selected_card in _initial_selected_cards:
+					if selected_card.card_id == card_data.card_id:
+						was_selected = true
+						card_node.flip_card(true)
+						card_node.modulate = Color(1, 1, 0.7)
+						break
+				if not was_selected:
+					card_node.flip_card(false)
+					card_node.modulate = Color(1, 1, 1)
+					card_node.disabled = false
+			else:
+				card_node.flip_card(false)
+				card_node.modulate = Color(1, 1, 1)
 		else:
 			card_node.flip_card(false)
-			card_node.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			card_node.modulate = Color(1, 1, 1)
 			card_node.disabled = true
 		
 		hand_container.add_child(card_node)
 		cards_added += 1
-	
-	if cards_added == 0:
-		display_error_card("No cards to display")
 
-func _on_card_pressed(card_node):
+func _on_card_input(event: InputEvent, card_node):
 	if not card_node:
 		return
 		
-	if not card_node.pressed.is_connected(_on_card_pressed):
-		card_node.pressed.connect(_on_card_pressed.bind(card_node))
-	
-	if is_initial_selection:
-		var already_selected = false
-		for selected_card in _initial_selected_cards:
-			if selected_card.card_id == card_node.card_data.card_id:
-				already_selected = true
-				break
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and not event.pressed:
+		if is_initial_selection and is_local_player:
+			var already_selected = false
+			for selected_card in _initial_selected_cards:
+				if selected_card.card_id == card_node.card_data.card_id:
+					already_selected = true
+					break
 
-		if already_selected:
-			return
+			if already_selected:
+				return
 
-		if _initial_selected_cards.size() >= 2:
-			return
+			if _initial_selected_cards.size() >= 2:
+				return
 
-		_initial_selected_cards.append(card_node.card_data)
-		card_node.temporary_reveal()
-		
-		if _initial_selected_cards.size() == 2:
-			var card_ids = []
-			for card in _initial_selected_cards:
-				card_ids.append(card.card_id)
-			initial_selection_complete.emit(card_ids)
+			_initial_selected_cards.append(card_node.card_data)
+			card_node.flip_card(true)
+			card_node.modulate = Color(1, 1, 0.7)
 			
-			for card in hand_container.get_children():
-				card.disabled = true
+			if _initial_selected_cards.size() == 2:
+				var card_ids = []
+				for card in _initial_selected_cards:
+					card_ids.append(card.card_id)
+				initial_selection_complete.emit(card_ids)
+				
+				for card in hand_container.get_children():
+					card.disabled = true
 
 func clear_hand():
 	call_deferred("_deferred_clear_hand_container")
@@ -131,7 +143,24 @@ func remove_card(card_id: String):
 func set_initial_selection_mode(enable: bool):
 	is_initial_selection = enable
 	_initial_selected_cards.clear()
-	update_hand_display(hand, is_local_player, is_initial_selection)
+	
+	if hand_container:
+		for card in hand_container.get_children():
+			if card.has_method("flip_card"):
+				if not enable:
+					card.flip_card(false)
+					card.modulate = Color(1, 1, 1)
+				else:
+					var was_selected = false
+					for selected_card in _initial_selected_cards:
+						if selected_card.card_id == card.card_data.card_id:
+							was_selected = true
+							card.flip_card(true)
+							card.modulate = Color(1, 1, 0.7)
+							break
+					if not was_selected:
+						card.flip_card(false)
+						card.modulate = Color(1, 1, 1)
 
 func display_error_card(error_message: String):
 	var error_card = ColorRect.new()
