@@ -665,7 +665,10 @@ func process_state_response(json: Dictionary):
 		if old_turn_index != current_turn_index:
 			if not initial_selection_mode and game_started:
 				if current_turn_index == player_index:
-					start_turn_sequence()
+					if json.has("next_player_card") and json.next_player_card != null:
+						show_temporary_card(json.next_player_card)
+					else:
+						start_turn_sequence()
 				else:
 					message_label.text = "Opponent's turn!"
 				update_card_states()
@@ -704,10 +707,11 @@ func process_state_response(json: Dictionary):
 						if typeof(card) == TYPE_DICTIONARY and card.has("card_id"):
 							var card_data = {
 								"card_id": card.card_id,
-								"is_face_up": false,
+								"is_face_up": card.temporary_reveal if card.has("temporary_reveal") else false,
 								"rank": card.rank if card.has("rank") else "0",
 								"suit": card.suit if card.has("suit") else "Unknown",
-								"value": float(card.rank) if card.has("rank") else 0.0
+								"value": float(card.rank) if card.has("rank") else 0.0,
+								"temporary_reveal": card.temporary_reveal if card.has("temporary_reveal") else false
 							}
 							processed_hand.append(card_data)
 					
@@ -854,6 +858,16 @@ func _on_card_played(card_data):
 		show_center_card(card_data)
 	
 	send_play_card(card_data.card_id)
+	
+	# Flip all cards face-down in opponent's hand
+	var opponent_index = (player_index + 1) % 2
+	var opponent_container = $GameContainer.get_node_or_null("TopPlayerContainer/Player%d" % opponent_index)
+	if opponent_container:
+		var hand_container = opponent_container.get_node("HandContainer")
+		if hand_container:
+			for card in hand_container.get_children():
+				card.flip_card(false)
+				card.modulate = Color(1, 1, 1)
 
 func send_initial_cards_selection(selected_cards_data: Array):
 	if is_request_in_progress:
@@ -888,6 +902,24 @@ func send_play_card(card_id: String):
 	if room_id.is_empty() or player_id.is_empty():
 		return
 
+	# Find the card data from the player's hand
+	var player_node = $GameContainer.get_node_or_null("BottomPlayerContainer/Player%d" % player_index)
+	if not is_instance_valid(player_node):
+		return
+		
+	var hand_container = player_node.get_node("HandContainer")
+	if not hand_container:
+		return
+		
+	var card_data = null
+	for card in hand_container.get_children():
+		if card.card_data.card_id == card_id:
+			card_data = card.card_data
+			break
+			
+	if not card_data:
+		return
+
 	is_request_in_progress = true
 	last_request_type = "play_card"
 	var url = BASE_URL + "play_card"
@@ -896,7 +928,7 @@ func send_play_card(card_id: String):
 	var body = JSON.stringify({
 		"room_id": room_id,
 		"player_index": player_index,
-		"card_id": card_id
+		"card": card_data
 	})
 	http.request(url, headers, HTTPClient.METHOD_POST, body)
 
@@ -1072,20 +1104,8 @@ func start_turn_sequence():
 		update_card_states()
 		return
 	
-	message_label.text = "Your turn! Drawing a card..."
-	
-	if is_request_in_progress:
-		return
-
-	is_request_in_progress = true
-	last_request_type = "draw_card"
-	var url = BASE_URL + "draw_card"
-	var headers = ["Content-Type: application/json"]
-	var body = JSON.stringify({
-		"room_id": room_id,
-		"player_index": player_index
-	})
-	http.request(url, headers, HTTPClient.METHOD_POST, body)
+	message_label.text = "Your turn! Play a card."
+	update_card_states()
 
 func handle_drawn_card(card_data: Dictionary):
 	if not card_data.has("rank") or not card_data.has("suit"):
@@ -1202,3 +1222,64 @@ func _update_card_animations():
 							var original_y = card.get_meta("original_y")
 							card.position.y = original_y + offset
 						card_index += 1
+
+func show_temporary_card(card_data: Dictionary):
+	var player_node = $GameContainer.get_node_or_null("BottomPlayerContainer/Player%d" % player_index)
+	if not is_instance_valid(player_node):
+		return
+		
+	var hand_container = player_node.get_node("HandContainer")
+	if not hand_container:
+		return
+	
+	var preview_card = preload("res://scenes/card.tscn").instantiate()
+	if not preview_card:
+		return
+		
+	preview_card.holding_player = player_node
+	preview_card.set_data(card_data)
+	preview_card.flip_card(true)
+	preview_card.disabled = true
+	preview_card.name = "TemporaryRevealCard"
+	
+	var card_width = 100
+	var card_height = 150
+	
+	# Position in center of screen
+	var viewport_size = get_viewport().size
+	preview_card.size = Vector2(card_width, card_height)
+	preview_card.position = Vector2(
+		(viewport_size.x - card_width) / 2,
+		(viewport_size.y - card_height) / 2
+	)
+	preview_card.z_index = 101
+	preview_card.modulate = Color(1, 1, 0.7)  # Slight yellow tint
+	
+	add_child(preview_card)
+	message_label.text = "You drew this card!"
+	
+	# Create timer to hide the card
+	var timer = Timer.new()
+	add_child(timer)
+	timer.wait_time = 3.0
+	timer.one_shot = true
+	timer.timeout.connect(func():
+		if is_instance_valid(preview_card):
+			preview_card.queue_free()
+		timer.queue_free()
+		message_label.text = "Your turn! Play a card."
+		update_card_states()
+	)
+	timer.start()
+	
+	# Add the card to hand face-down after preview
+	var new_card = preload("res://scenes/card.tscn").instantiate()
+	new_card.holding_player = player_node
+	new_card.set_data(card_data)
+	new_card.size = Vector2(card_width, card_height)
+	new_card.position = Vector2(
+		hand_container.position.x + hand_container.size.x - card_width - 20,
+		(hand_container.size.y - card_height) / 2
+	)
+	new_card.flip_card(false)
+	hand_container.add_child(new_card)
