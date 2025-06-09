@@ -3,10 +3,12 @@ extends Control
 @onready var http := $HTTPRequest
 @onready var effects := $Effects
 @onready var message_label := $MenuContainer/MessageLabel
-@onready var queens_button := $MenuContainer/queens_button
+@onready var queens_button := $GameContainer/queens_button
 @onready var room_list := $MenuContainer/RoomList
 @onready var center_card_slot := $GameContainer/CenterCardSlot
 @onready var room_name_label := $GameContainer/RoomNameLabel
+@onready var turn_indicator := $GameContainer/TurnIndicator
+@onready var game_over_label := $GameContainer/GameOverLabel
 
 var room_management_node: Control = null
 var create_room_button: Button = null
@@ -193,10 +195,43 @@ func join_game(selected_room_id: String = ""):
 
 func _on_queens_pressed():
 	if message_label.text != "": return
-	effects.animate_text_pop(message_label, "Playing Queens!")
-	if player_index != current_turn_index:
-		message_label.text = "Not your turn!"
-		return
+	
+	var player0_node = $GameContainer/BottomPlayerContainer.get_node_or_null("Player0")
+	var player1_node = $GameContainer/TopPlayerContainer.get_node_or_null("Player1")
+	
+	var player0_score = calculate_player_score(player0_node)
+	var player1_score = calculate_player_score(player1_node)
+	
+	var winner_text = ""
+	if player0_score < player1_score:
+		winner_text = "Player 0 wins with score " + str(player0_score) + "!"
+	elif player1_score < player0_score:
+		winner_text = "Player 1 wins with score " + str(player1_score) + "!"
+	else:
+		winner_text = "It's a tie! Both players have score " + str(player0_score)
+	
+	game_over_label.text = winner_text
+	
+	# Disable all cards
+	if player0_node:
+		var hand_container = player0_node.get_node("HandContainer")
+		if hand_container:
+			for card in hand_container.get_children():
+				card.disabled = true
+				card.flip_card(false)  # Show all cards
+	
+	if player1_node:
+		var hand_container = player1_node.get_node("HandContainer")
+		if hand_container:
+			for card in hand_container.get_children():
+				card.disabled = true
+				card.flip_card(false)  # Show all cards
+	
+	# Hide the Queens button and clear center card
+	queens_button.visible = false
+	show_center_card({})
+	
+	# Send game over to server
 	last_request_type = "call_queens"
 	var url = BASE_URL + "call_queens"
 	var headers = ["Content-Type: application/json"]
@@ -248,6 +283,7 @@ func _on_request_completed(result, response_code, headers, body):
 				total_players = json.total_players if json.has("total_players") else 0
 				current_turn_index = int(json.current_turn_index) if json.has("current_turn_index") else -1
 				initial_selection_mode = json.initial_selection_mode if json.has("initial_selection_mode") else false
+				update_turn_indicator()
 				
 				ensure_player_nodes()
 				
@@ -365,8 +401,10 @@ func show_center_card(card_data: Dictionary):
 				center_card_slot.add_child(card_node)
 			
 			center_card = card_data.duplicate()
+			queens_button.visible = true
 		else:
 			center_card = {}
+			queens_button.visible = false
 
 func update_center_card_slot_position():
 	if center_card_slot:
@@ -721,9 +759,8 @@ func process_state_response(json: Dictionary):
 						player_node.update_hand_display(processed_hand, p_index == player_index, initial_selection_mode)
 	
 	if json.has("center_card") and not initial_selection_mode:
-		show_center_card(json.center_card)
+			show_center_card(json.center_card)
 		
-	# Handle special card responses
 	match last_request_type:
 		"king_reveal":
 			if json.has("status") and json.status == "ok":
@@ -1257,3 +1294,38 @@ func show_temporary_card(card_data: Dictionary):
 	)
 	new_card.flip_card(false)
 	hand_container.add_child(new_card)
+
+func update_turn_indicator():
+	if not turn_indicator:
+		return
+		
+	if current_turn_index >= 0:
+		turn_indicator.text = "Player " + str(current_turn_index)
+	else:
+		turn_indicator.text = ""
+
+func calculate_card_value(rank: String) -> int:
+	match rank:
+		"12": # Queen
+			return 0
+		"11", "13": # Jack and King
+			return 10
+		"1": # Ace
+			return 1
+		_:
+			return int(rank)
+
+func calculate_player_score(player_node) -> int:
+	if not is_instance_valid(player_node):
+		return 0
+		
+	var hand_container = player_node.get_node("HandContainer")
+	if not hand_container:
+		return 0
+		
+	var total_score = 0
+	for card in hand_container.get_children():
+		if card.has_method("get_rank"):
+			total_score += calculate_card_value(card.get_rank())
+	
+	return total_score

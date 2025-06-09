@@ -199,3 +199,6 @@ func _on_card_played():
 	
 	is_dragging = false
 	z_index = initial_z_index
+
+func get_rank() -> String:
+	return rank

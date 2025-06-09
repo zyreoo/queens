@@ -69,11 +69,9 @@ func update_hand_display(new_hand: Array, local_player: bool, initial_selection:
 					if selected_card.card_id == card_data.card_id:
 						was_selected = true
 						card_node.flip_card(true)
-						card_node.modulate = Color(1, 1, 0.7)
 						break
 				if not was_selected:
 					card_node.flip_card(false)
-					card_node.modulate = Color(1, 1, 1)
 					card_node.disabled = false
 			else:
 				card_node.flip_card(false)
@@ -156,11 +154,9 @@ func set_initial_selection_mode(enable: bool):
 						if selected_card.card_id == card.card_data.card_id:
 							was_selected = true
 							card.flip_card(true)
-							card.modulate = Color(1, 1, 0.7)
 							break
 					if not was_selected:
 						card.flip_card(false)
-						card.modulate = Color(1, 1, 1)
 
 func display_error_card(error_message: String):
 	var error_card = ColorRect.new()

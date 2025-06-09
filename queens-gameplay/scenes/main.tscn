@@ -32,6 +32,18 @@ theme_override_font_sizes/font_size = 18
 text = "Room: "
 horizontal_alignment = 1
 
+[node name="TurnIndicator" type="Label" parent="GameContainer"]
+z_index = 1
+layout_mode = 0
+offset_left = 20.0
+offset_top = 50.0
+offset_right = 220.0
+offset_bottom = 76.0
+theme_override_fonts/font = ExtResource("2_jyhfs")
+theme_override_font_sizes/font_size = 18
+text = "Waiting for game to start..."
+horizontal_alignment = 1
+
 [node name="TopPlayerContainer" type="Control" parent="GameContainer"]
 layout_mode = 1
 anchors_preset = 10
@@ -54,6 +66,42 @@ offset_right = 70.0
 offset_bottom = 98.0
 grow_horizontal = 2
 grow_vertical = 2
+
+[node name="queens_button" type="Button" parent="GameContainer"]
+visible = false
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -200.0
+offset_top = -20.0
+offset_right = -100.0
+offset_bottom = 20.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_fonts/font = ExtResource("2_jyhfs")
+theme_override_font_sizes/font_size = 32
+text = "QUEENS"
+
+[node name="GameOverLabel" type="Label" parent="GameContainer"]
+z_index = 1
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -200.0
+offset_top = -150.0
+offset_right = 200.0
+offset_bottom = -110.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_fonts/font = ExtResource("2_jyhfs")
+theme_override_font_sizes/font_size = 32
+horizontal_alignment = 1
 
 [node name="BottomPlayerContainer" type="Control" parent="GameContainer"]
 layout_mode = 1
@@ -102,11 +150,6 @@ layout_mode = 2
 theme_override_fonts/font = ExtResource("2_jyhfs")
 theme_override_font_sizes/font_size = 32
 text = "Join Room"
-
-[node name="queens_button" type="Button" parent="MenuContainer"]
-layout_mode = 2
-theme_override_font_sizes/font_size = 32
-text = "QUEENS"
 
 [node name="RoomList" type="ItemList" parent="MenuContainer"]
 layout_mode = 2
@@ -169,7 +212,7 @@ text = "[center][b]Game Rules[/b][/center]
 - Click on your cards when prompted by special card effects
 - Watch the center area for opponent's plays"
 
+[connection signal="pressed" from="GameContainer/queens_button" to="." method="_on_queens_pressed"]
 [connection signal="pressed" from="MenuContainer/CreateRoomButton" to="." method="_on_create_room_pressed"]
 [connection signal="pressed" from="MenuContainer/JoinButton" to="." method="_on_join_pressed"]
-[connection signal="pressed" from="MenuContainer/queens_button" to="." method="_on_queens_pressed"]
 [connection signal="item_selected" from="MenuContainer/RoomList" to="." method="_on_room_selected"]
