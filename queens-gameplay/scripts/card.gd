@@ -202,3 +202,8 @@ func _on_card_played():
 
 func get_rank() -> String:
 	return rank
+
+func get_card_id() -> String:
+	if card_data and card_data.has("card_id"):
+		return card_data.card_id
+	return ""

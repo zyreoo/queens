@@ -56,6 +56,7 @@ const ANIMATION_SPEED: float = 2.0
 const ANIMATION_AMPLITUDE: float = 10.0
 
 func _ready():
+	print("Game starting up...")
 	var animation_timer = Timer.new()
 	animation_timer.name = "CardAnimationTimer"
 	animation_timer.wait_time = 0.016
@@ -93,22 +94,24 @@ func _ready():
 	poll_timer.timeout.connect(fetch_state)
 	
 	room_update_timer = Timer.new()
+	room_update_timer.wait_time = 2.0
+	room_update_timer.timeout.connect(_on_room_update_timer_timeout)
 	add_child(room_update_timer)
-	room_update_timer.wait_time = 3.0
-	room_update_timer.timeout.connect(refresh_room_list)
 	room_update_timer.start()
 	
 	if not http.request_completed.is_connected(_on_request_completed):
 		http.request_completed.connect(_on_request_completed)
 	
+	# Make sure the Queens button is connected
 	if queens_button and not queens_button.pressed.is_connected(_on_queens_pressed):
 		queens_button.pressed.connect(_on_queens_pressed)
+		print("Connecting Queens button signal")
+	
+	queens_button.visible = false
 	
 	refresh_room_list()
-
 	call_deferred("get_room_management_nodes")
 	call_deferred("add_button_effects_deferred")
-	queens_button.visible = false
 
 func get_room_management_nodes():
 	var menu_container = get_node_or_null("MenuContainer")
@@ -194,64 +197,75 @@ func join_game(selected_room_id: String = ""):
 	http.request(url, headers, HTTPClient.METHOD_POST, body)
 
 func _on_queens_pressed():
-	if message_label.text != "": return
+	print("\nQUEENS BUTTON PRESSED!")
 	
 	var player0_node = $GameContainer/BottomPlayerContainer.get_node_or_null("Player0")
 	var player1_node = $GameContainer/TopPlayerContainer.get_node_or_null("Player1")
 	
+	print("Player0 node exists: ", player0_node != null)
+	print("Player1 node exists: ", player1_node != null)
+	
 	var player0_score = calculate_player_score(player0_node)
 	var player1_score = calculate_player_score(player1_node)
 	
+	print("Player0 score: ", player0_score)
+	print("Player1 score: ", player1_score)
+	
+	# Send to server
+	print("Sending Queens call to server...")
+	last_request_type = "call_queens"
+	var url = BASE_URL + "call_queens"
+	var headers = ["Content-Type: application/json"]
+	var body = JSON.stringify({
+		"room_id": room_id,
+		"player_index": player_index,
+		"player0_score": player0_score,
+		"player1_score": player1_score
+	})
+	http.request(url, headers, HTTPClient.METHOD_POST, body)
+	
+	# Update local display
 	var winner_text = ""
 	if player0_score < player1_score:
-		winner_text = "Player 0 wins with score " + str(player0_score) + "!"
+		winner_text = "Player 0 wins with score " + str(player0_score) + "! (Player 1 had " + str(player1_score) + ")"
 	elif player1_score < player0_score:
-		winner_text = "Player 1 wins with score " + str(player1_score) + "!"
+		winner_text = "Player 1 wins with score " + str(player1_score) + "! (Player 0 had " + str(player0_score) + ")"
 	else:
 		winner_text = "It's a tie! Both players have score " + str(player0_score)
 	
 	game_over_label.text = winner_text
+	message_label.text = ""
 	
-	# Disable all cards
+	# Show all cards face up
 	if player0_node:
 		var hand_container = player0_node.get_node("HandContainer")
 		if hand_container:
 			for card in hand_container.get_children():
 				card.disabled = true
-				card.flip_card(false)  # Show all cards
+				card.flip_card(true)
 	
 	if player1_node:
 		var hand_container = player1_node.get_node("HandContainer")
 		if hand_container:
 			for card in hand_container.get_children():
 				card.disabled = true
-				card.flip_card(false)  # Show all cards
+				card.flip_card(true)
 	
-	# Hide the Queens button and clear center card
+	# Hide Queens button and clear center
 	queens_button.visible = false
 	show_center_card({})
-	
-	# Send game over to server
-	last_request_type = "call_queens"
-	var url = BASE_URL + "call_queens"
-	var headers = ["Content-Type: application/json"]
-	var body = JSON.stringify({
-		"room_id": room_id,
-		"player_index": player_index
-	})
-	http.request(url, headers, HTTPClient.METHOD_POST, body)
 
 func _on_request_completed(result, response_code, headers, body):
 	is_request_in_progress = false
 	
 	if result != HTTPRequest.RESULT_SUCCESS:
 		return
-		
+
 	var json = JSON.parse_string(body.get_string_from_utf8())
 	
 	if not json:
 		return
-
+		
 	if json.has("status") and json.status == "error":
 		if json.has("message"):
 			message_label.text = json.message
@@ -264,7 +278,7 @@ func _on_request_completed(result, response_code, headers, body):
 						for card in hand_container.get_children():
 							card.disabled = false
 		return
-
+	
 	match last_request_type:
 		"list_rooms":
 			update_room_list(json.rooms)
@@ -361,6 +375,9 @@ func _on_request_completed(result, response_code, headers, body):
 		"draw_card":
 			if json.has("card"):
 				handle_drawn_card(json.card)
+		"call_queens":
+			if json.has("status") and json.status == "ok":
+				pass
 
 func update_player_hand(for_player_index: int, hand_data: Array):
 	var container_name = "BottomPlayerContainer" if for_player_index == player_index else "TopPlayerContainer"
@@ -381,30 +398,50 @@ func update_player_hand(for_player_index: int, hand_data: Array):
 		player_node.set_initial_selection_mode(initial_selection_mode)
 	player_node.update_hand_display(hand_data, for_player_index == player_index, initial_selection_mode)
 
-func show_center_card(card_data: Dictionary):
-	if center_card_slot:
-		for child in center_card_slot.get_children():
-			if child.name != "PreviewCard":
-				child.queue_free()
+func show_center_card(card_data):
+	print("show_center_card called with: ", card_data)
+	if card_data == null:
+		card_data = {}
+		print("card_data was null, converted to empty dictionary")
+	
+	if not center_card_slot:
+		print("No center card slot found")
+		return
 		
-		if card_data and not card_data.is_empty():
-			var card_node = preload("res://scenes/card.tscn").instantiate()
-			if card_node:
-				card_node.set_data(card_data)
-				card_node.flip_card(true)
-				card_node.mouse_filter = Control.MOUSE_FILTER_IGNORE
-				card_node.focus_mode = Control.FOCUS_NONE
-				card_node.mouse_default_cursor_shape = Control.CURSOR_ARROW
-				card_node.is_center_card = true
-				card_node.position = Vector2.ZERO
-				card_node.z_index = 3
-				center_card_slot.add_child(card_node)
-			
-			center_card = card_data.duplicate()
-			queens_button.visible = true
-		else:
-			center_card = {}
-			queens_button.visible = false
+	# If the card is already shown and has the same ID, don't show it again
+	if center_card_slot.get_child_count() > 0:
+		var existing_card = center_card_slot.get_child(0)
+		if existing_card and existing_card.has_method("get_card_id") and card_data.has("card_id"):
+			if existing_card.get_card_id() == card_data.card_id:
+				print("Card already shown in center, skipping")
+				return
+	
+	# Clear existing cards
+	for child in center_card_slot.get_children():
+		child.queue_free()
+	
+	# Only create new card if we have valid data
+	if card_data and not card_data.is_empty():
+		print("Creating new card node for center")
+		var card_node = preload("res://scenes/card.tscn").instantiate()
+		if card_node:
+			card_node.set_data(card_data)
+			card_node.flip_card(true)
+			card_node.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			card_node.focus_mode = Control.FOCUS_NONE
+			card_node.mouse_default_cursor_shape = Control.CURSOR_ARROW
+			card_node.is_center_card = true
+			card_node.position = Vector2.ZERO
+			card_node.z_index = 3
+			center_card_slot.add_child(card_node)
+		
+		center_card = card_data.duplicate()
+		queens_button.visible = true
+		print("Center card set and queens button made visible")
+	else:
+		center_card = {}
+		queens_button.visible = false
+		print("Center card cleared and queens button hidden")
 
 func update_center_card_slot_position():
 	if center_card_slot:
@@ -675,6 +712,42 @@ func process_state_response(json: Dictionary):
 
 	if is_showing_drawn_card:
 		return
+		
+	if json.has("queens_called_by") and int(json.queens_called_by) != player_index:
+		var player0_score = int(json.player0_score)
+		var player1_score = int(json.player1_score)
+		
+		var winner_text = ""
+		if player0_score < player1_score:
+			winner_text = "Player 0 wins with score " + str(player0_score) + "! (Player 1 had " + str(player1_score) + ")"
+		elif player1_score < player0_score:
+			winner_text = "Player 1 wins with score " + str(player1_score) + "! (Player 0 had " + str(player0_score) + ")"
+		else:
+			winner_text = "It's a tie! Both players have score " + str(player0_score)
+		
+		game_over_label.text = winner_text
+		message_label.text = ""
+		
+		var player0_node = $GameContainer/BottomPlayerContainer.get_node_or_null("Player0")
+		var player1_node = $GameContainer/TopPlayerContainer.get_node_or_null("Player1")
+		
+		if player0_node:
+			var hand_container = player0_node.get_node("HandContainer")
+			if hand_container:
+				for card in hand_container.get_children():
+					card.disabled = true
+					card.flip_card(true)
+		
+		if player1_node:
+			var hand_container = player1_node.get_node("HandContainer")
+			if hand_container:
+				for card in hand_container.get_children():
+					card.disabled = true
+					card.flip_card(true)
+		
+		queens_button.visible = false
+		show_center_card({})
+		return
 
 	if json.has("game_started"):
 		var old_game_started = game_started
@@ -843,14 +916,11 @@ func _on_card_reveal_pressed(card_node):
 	})
 	http.request(url, headers, HTTPClient.METHOD_POST, body)
 	
-	# Immediately show the card as revealed
 	card_node.flip_card(true)
 	card_node.modulate = Color(0.7, 1.0, 0.7)
 	
-	# Disable all cards during reveal
 	disable_all_cards()
 	
-	# Set up timer to flip the card back
 	var timer = Timer.new()
 	add_child(timer)
 	timer.wait_time = 3.0
@@ -860,7 +930,6 @@ func _on_card_reveal_pressed(card_node):
 			card_node.flip_card(false)
 			card_node.modulate = Color(1, 1, 1)
 		
-		# Remove the King card that was played
 		var player_node = $GameContainer.get_node_or_null("BottomPlayerContainer/Player%d" % player_index)
 		if is_instance_valid(player_node):
 			var hand_container = player_node.get_node("HandContainer")
@@ -878,19 +947,25 @@ func _on_card_reveal_pressed(card_node):
 	timer.start()
 
 func _on_card_played(card_data):
-	var player_node = $GameContainer.get_node_or_null("BottomPlayerContainer/Player%d" % player_index)
+	print("Card played function called with: ", card_data)
+	var player_node = $GameContainer/BottomPlayerContainer.get_node_or_null("Player%d" % player_index)
 	if not is_instance_valid(player_node):
+		print("Player node not valid!")
 		return
 		
 	if current_turn_index != player_index:
+		print("Not current player's turn!")
 		return
 	
 	if initial_selection_mode:
+		print("In initial selection mode!")
 		return
 	
+	print("Sending play_card with ID: ", card_data.card_id)
 	send_play_card(card_data.card_id)
 	
-	if card_data.rank == "13":
+	if card_data.rank == "13":  # King
+		print("King card played")
 		king_reveal_mode = true
 		king_player_index = player_index
 		message_label.text = "King played! Choose one of your cards to reveal."
@@ -905,20 +980,39 @@ func _on_card_played(card_data):
 					card.modulate = Color(0.7, 0.7, 0.7)
 					card.mouse_filter = Control.MOUSE_FILTER_IGNORE
 					break
-			
 		enable_king_reveal_mode()
 		
-	elif card_data.rank == "12":
+	elif card_data.rank == "12":  # Queen
+		print("Queen card played")
 		message_label.text = "Queen played! Card will be added to opponent's hand."
-		show_center_card({})
 		
+		# First show the Queen in the center
+		print("Showing Queen in center")
+		show_center_card(card_data.duplicate())
+		
+		# Calculate opponent index and get their node
+		var opponent_index = (player_index + 1) % 2
+		var opponent_container_name = "TopPlayerContainer" if opponent_index == 1 else "BottomPlayerContainer"
+		print("Opponent index: ", opponent_index)
+		print("Looking for opponent in container: ", opponent_container_name)
+		
+		var opponent_node = $GameContainer.get_node_or_null("%s/Player%d" % [opponent_container_name, opponent_index])
+		if opponent_node:
+			print("Found opponent node, adding Queen to their hand")
+			opponent_node.add_card(card_data.duplicate())
+		else:
+			print("ERROR: Could not find opponent node!")
+		
+		# Remove the Queen from the current player's hand
 		var hand_container = player_node.get_node("HandContainer")
 		if hand_container:
 			for card in hand_container.get_children():
 				if card.card_data.card_id == card_data.card_id:
+					print("Removing Queen from player's hand")
 					card.queue_free()
 					break
 	else:
+		print("Regular card played: ", card_data.rank, " of ", card_data.suit)
 		show_center_card(card_data)
 		message_label.text = "Card played: " + card_data.rank + " of " + card_data.suit
 		
@@ -928,15 +1022,6 @@ func _on_card_played(card_data):
 				if card.card_data.card_id == card_data.card_id:
 					card.queue_free()
 					break
-	
-	var opponent_index = (player_index + 1) % 2
-	var opponent_container = $GameContainer.get_node_or_null("TopPlayerContainer/Player%d" % opponent_index)
-	if opponent_container:
-		var hand_container = opponent_container.get_node("HandContainer")
-		if hand_container:
-			for card in hand_container.get_children():
-				card.flip_card(false)
-				card.modulate = Color(1, 1, 1)
 
 func send_initial_cards_selection(selected_cards_data: Array):
 	if is_request_in_progress:
@@ -971,7 +1056,6 @@ func send_play_card(card_id: String):
 	if room_id.is_empty() or player_id.is_empty():
 		return
 
-	# Find the card data from the player's hand
 	var player_node = $GameContainer.get_node_or_null("BottomPlayerContainer/Player%d" % player_index)
 	if not is_instance_valid(player_node):
 		return
@@ -1144,43 +1228,37 @@ func handle_drawn_card(card_data: Dictionary):
 	var card_height = 150
 	var card_spacing = 20
 	
-	# Calculate the final position - always on the right side
-	var final_x = hand_container.position.x + hand_container.size.x - card_width - 20  # 20px margin from right
+	var final_x = hand_container.position.x + hand_container.size.x - card_width - 20
 	var final_y = hand_container.position.y + (hand_container.size.y - card_height) / 2
 	
-	# Start position - center of screen but slightly higher
 	var viewport_size = get_viewport().size
 	preview_card.size = Vector2(card_width, card_height)
 	preview_card.position = Vector2(
 		(viewport_size.x - card_width) / 2,
-		(viewport_size.y - card_height) / 2 - 100  # Start higher up
+		(viewport_size.y - card_height) / 2 - 100
 	)
 	preview_card.z_index = 101
 	
 	add_child(preview_card)
 	is_showing_drawn_card = true
 	
-	# Create the animation sequence
 	var tween = create_tween()
 	tween.set_trans(Tween.TRANS_CUBIC)
 	tween.set_ease(Tween.EASE_OUT)
 	
-	# First move up slightly with a small pause
 	tween.tween_property(preview_card, "position:y", preview_card.position.y - 30, 0.3)
 	tween.tween_interval(0.5)
 	
-	# Create arc movement
 	tween.tween_method(
 		func(t: float):
 			var start = preview_card.position
 			var end = Vector2(final_x, final_y)
 			var arc_pos = start.lerp(end, t)
-			arc_pos.y -= sin(t * PI) * 100  # Add arc movement
+			arc_pos.y -= sin(t * PI) * 100
 			preview_card.position = arc_pos,
 		0.0, 1.0, 0.8
 	)
 	
-	# Final cleanup and card creation
 	tween.tween_callback(func():
 		if is_instance_valid(preview_card):
 			preview_card.queue_free()
@@ -1195,7 +1273,6 @@ func handle_drawn_card(card_data: Dictionary):
 		new_card.flip_card(false)
 		hand_container.add_child(new_card)
 		
-		# Add a nice "pop" effect when the card appears
 		new_card.scale = Vector2(0.8, 0.8)
 		var appear_tween = create_tween()
 		appear_tween.tween_property(new_card, "scale", Vector2(1.1, 1.1), 0.2)
@@ -1210,9 +1287,8 @@ func apply_custom_font(node: Node, font: Font):
 		apply_custom_font(child, font)
 
 func _update_card_animations():
-	animation_time += 0.016  # Increment time
+	animation_time += 0.016
 	
-	# Update cards in both containers
 	for container_name in ["BottomPlayerContainer", "TopPlayerContainer"]:
 		var container = $GameContainer.get_node_or_null(container_name)
 		if container:
@@ -1221,15 +1297,13 @@ func _update_card_animations():
 				if hand_container:
 					var card_index = 0
 					for card in hand_container.get_children():
-						if card is TextureButton and not card.is_dragging:  # Skip cards that are being dragged
+						if card is TextureButton and not card.is_dragging:
 							var phase = animation_time * ANIMATION_SPEED + card_index * 0.5
 							var offset = sin(phase) * ANIMATION_AMPLITUDE
 							
-							# Store original position if not already stored
 							if not card.has_meta("original_y"):
 								card.set_meta("original_y", card.position.y)
 							
-							# Update position with sine wave offset
 							var original_y = card.get_meta("original_y")
 							card.position.y = original_y + offset
 						card_index += 1
@@ -1256,7 +1330,6 @@ func show_temporary_card(card_data: Dictionary):
 	var card_width = 100
 	var card_height = 150
 	
-	# Position in center of screen
 	var viewport_size = get_viewport().size
 	preview_card.size = Vector2(card_width, card_height)
 	preview_card.position = Vector2(
@@ -1264,12 +1337,11 @@ func show_temporary_card(card_data: Dictionary):
 		(viewport_size.y - card_height) / 2
 	)
 	preview_card.z_index = 101
-	preview_card.modulate = Color(1, 1, 0.7)  # Slight yellow tint
+	preview_card.modulate = Color(1, 1, 0.7)
 	
 	add_child(preview_card)
 	message_label.text = "You drew this card!"
 	
-	# Create timer to hide the card
 	var timer = Timer.new()
 	add_child(timer)
 	timer.wait_time = 3.0
@@ -1283,7 +1355,6 @@ func show_temporary_card(card_data: Dictionary):
 	)
 	timer.start()
 	
-	# Add the card to hand face-down after preview
 	var new_card = preload("res://scenes/card.tscn").instantiate()
 	new_card.holding_player = player_node
 	new_card.set_data(card_data)
@@ -1304,17 +1375,6 @@ func update_turn_indicator():
 	else:
 		turn_indicator.text = ""
 
-func calculate_card_value(rank: String) -> int:
-	match rank:
-		"12": # Queen
-			return 0
-		"11", "13": # Jack and King
-			return 10
-		"1": # Ace
-			return 1
-		_:
-			return int(rank)
-
 func calculate_player_score(player_node) -> int:
 	if not is_instance_valid(player_node):
 		return 0
@@ -1325,7 +1385,19 @@ func calculate_player_score(player_node) -> int:
 		
 	var total_score = 0
 	for card in hand_container.get_children():
-		if card.has_method("get_rank"):
-			total_score += calculate_card_value(card.get_rank())
-	
+		if card.has_method("get_card_id"):  # Make sure it's a card node
+			var card_data = card.card_data
+			if card_data.has("rank"):
+				match card_data.rank:
+					"12":  # Queen
+						total_score += 0
+					"11", "13":  # Jack or King
+						total_score += 10
+					"1":  # Ace
+						total_score += 1
+					_:  # All other cards
+						total_score += int(card_data.rank)
 	return total_score
+
+func _on_room_update_timer_timeout():
+	refresh_room_list()
