@@ -44,7 +44,7 @@ var MAX_PLAYERS = 4
 var is_showing_drawn_card := false
 var received_first_turn_card := false
 
-const BASE_URL = "http://localhost:3000/"
+const BASE_URL = "https://web-production-2342a.up.railway.app/"
 
 var _initial_selected_cards = []
 var game_started := false
@@ -56,7 +56,6 @@ const ANIMATION_SPEED: float = 2.0
 const ANIMATION_AMPLITUDE: float = 10.0
 
 func _ready():
-	print("Game starting up...")
 	var animation_timer = Timer.new()
 	animation_timer.name = "CardAnimationTimer"
 	animation_timer.wait_time = 0.016
@@ -105,7 +104,6 @@ func _ready():
 	# Make sure the Queens button is connected
 	if queens_button and not queens_button.pressed.is_connected(_on_queens_pressed):
 		queens_button.pressed.connect(_on_queens_pressed)
-		print("Connecting Queens button signal")
 	
 	queens_button.visible = false
 	
@@ -197,22 +195,13 @@ func join_game(selected_room_id: String = ""):
 	http.request(url, headers, HTTPClient.METHOD_POST, body)
 
 func _on_queens_pressed():
-	print("\nQUEENS BUTTON PRESSED!")
-	
 	var player0_node = $GameContainer/BottomPlayerContainer.get_node_or_null("Player0")
 	var player1_node = $GameContainer/TopPlayerContainer.get_node_or_null("Player1")
-	
-	print("Player0 node exists: ", player0_node != null)
-	print("Player1 node exists: ", player1_node != null)
 	
 	var player0_score = calculate_player_score(player0_node)
 	var player1_score = calculate_player_score(player1_node)
 	
-	print("Player0 score: ", player0_score)
-	print("Player1 score: ", player1_score)
-	
 	# Send to server
-	print("Sending Queens call to server...")
 	last_request_type = "call_queens"
 	var url = BASE_URL + "call_queens"
 	var headers = ["Content-Type: application/json"]
@@ -399,13 +388,10 @@ func update_player_hand(for_player_index: int, hand_data: Array):
 	player_node.update_hand_display(hand_data, for_player_index == player_index, initial_selection_mode)
 
 func show_center_card(card_data):
-	print("show_center_card called with: ", card_data)
 	if card_data == null:
 		card_data = {}
-		print("card_data was null, converted to empty dictionary")
 	
 	if not center_card_slot:
-		print("No center card slot found")
 		return
 		
 	# If the card is already shown and has the same ID, don't show it again
@@ -413,7 +399,6 @@ func show_center_card(card_data):
 		var existing_card = center_card_slot.get_child(0)
 		if existing_card and existing_card.has_method("get_card_id") and card_data.has("card_id"):
 			if existing_card.get_card_id() == card_data.card_id:
-				print("Card already shown in center, skipping")
 				return
 	
 	# Clear existing cards
@@ -422,7 +407,6 @@ func show_center_card(card_data):
 	
 	# Only create new card if we have valid data
 	if card_data and not card_data.is_empty():
-		print("Creating new card node for center")
 		var card_node = preload("res://scenes/card.tscn").instantiate()
 		if card_node:
 			card_node.set_data(card_data)
@@ -437,11 +421,9 @@ func show_center_card(card_data):
 		
 		center_card = card_data.duplicate()
 		queens_button.visible = true
-		print("Center card set and queens button made visible")
 	else:
 		center_card = {}
 		queens_button.visible = false
-		print("Center card cleared and queens button hidden")
 
 func update_center_card_slot_position():
 	if center_card_slot:
@@ -947,25 +929,19 @@ func _on_card_reveal_pressed(card_node):
 	timer.start()
 
 func _on_card_played(card_data):
-	print("Card played function called with: ", card_data)
 	var player_node = $GameContainer/BottomPlayerContainer.get_node_or_null("Player%d" % player_index)
 	if not is_instance_valid(player_node):
-		print("Player node not valid!")
 		return
 		
 	if current_turn_index != player_index:
-		print("Not current player's turn!")
 		return
 	
 	if initial_selection_mode:
-		print("In initial selection mode!")
 		return
 	
-	print("Sending play_card with ID: ", card_data.card_id)
 	send_play_card(card_data.card_id)
 	
 	if card_data.rank == "13":  # King
-		print("King card played")
 		king_reveal_mode = true
 		king_player_index = player_index
 		message_label.text = "King played! Choose one of your cards to reveal."
@@ -983,36 +959,27 @@ func _on_card_played(card_data):
 		enable_king_reveal_mode()
 		
 	elif card_data.rank == "12":  # Queen
-		print("Queen card played")
 		message_label.text = "Queen played! Card will be added to opponent's hand."
 		
 		# First show the Queen in the center
-		print("Showing Queen in center")
 		show_center_card(card_data.duplicate())
 		
 		# Calculate opponent index and get their node
 		var opponent_index = (player_index + 1) % 2
 		var opponent_container_name = "TopPlayerContainer" if opponent_index == 1 else "BottomPlayerContainer"
-		print("Opponent index: ", opponent_index)
-		print("Looking for opponent in container: ", opponent_container_name)
 		
 		var opponent_node = $GameContainer.get_node_or_null("%s/Player%d" % [opponent_container_name, opponent_index])
 		if opponent_node:
-			print("Found opponent node, adding Queen to their hand")
 			opponent_node.add_card(card_data.duplicate())
-		else:
-			print("ERROR: Could not find opponent node!")
 		
 		# Remove the Queen from the current player's hand
 		var hand_container = player_node.get_node("HandContainer")
 		if hand_container:
 			for card in hand_container.get_children():
 				if card.card_data.card_id == card_data.card_id:
-					print("Removing Queen from player's hand")
 					card.queue_free()
 					break
 	else:
-		print("Regular card played: ", card_data.rank, " of ", card_data.suit)
 		show_center_card(card_data)
 		message_label.text = "Card played: " + card_data.rank + " of " + card_data.suit
 		

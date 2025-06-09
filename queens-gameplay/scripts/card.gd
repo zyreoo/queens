@@ -18,7 +18,7 @@ var http: HTTPRequest
 var initial_click_pos := Vector2.ZERO
 
 const DRAG_THRESHOLD := 10.0
-const BASE_URL = "http://localhost:3000/"
+const BASE_URL = "https://web-production-2342a.up.railway.app/"
 const DEFAULT_TEXTURE_PATH = "res://icon.svg"
 
 @onready var effects = get_node("/root/Main/Effects")
