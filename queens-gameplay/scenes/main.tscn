@@ -39,6 +39,7 @@ anchor_right = 1.0
 offset_top = 62.0
 offset_bottom = 262.0
 grow_horizontal = 2
+grow_vertical = 2
 
 [node name="CenterCardSlot" type="Control" parent="GameContainer"]
 layout_mode = 1
@@ -150,17 +151,23 @@ bbcode_enabled = true
 text = "[center][b]Game Rules[/b][/center]
 
 1. Each player starts with 4 cards
-2. On your turn, play any card from your hand
-3. Special cards:
-   - Jack: Swap a card with opponent
-   - Queen: Call 'Queens' to end game
-   - King: Reveal any card
-4. Lowest card at game end wins!
+2. Players take turns playing one card at a time
+3. When you play a card, you get to see your opponent's next card briefly
+4. Special cards:
+   - King (13): Reveal one of your cards to your opponent temporarily
+   - Queen (12): Send this card directly to your opponent's hand
+5. Strategy:
+   - Try to keep track of what cards your opponent has seen
+   - Use Kings wisely to reveal high cards and mislead your opponent
+   - Use Queens to give your opponent high cards
+6. Game End:
+   - Press the 'QUEENS' button to end the game
+   - The player with the lowest card wins!
 
 [center][b]Controls[/b][/center]
-- Drag a card from your hand over the center card to play it
-- Use special cards when it's your turn
-- Watch the center card for valid plays"
+- Drag cards from your hand to the center to play them
+- Click on your cards when prompted by special card effects
+- Watch the center area for opponent's plays"
 
 [connection signal="pressed" from="MenuContainer/CreateRoomButton" to="." method="_on_create_room_pressed"]
 [connection signal="pressed" from="MenuContainer/JoinButton" to="." method="_on_join_pressed"]

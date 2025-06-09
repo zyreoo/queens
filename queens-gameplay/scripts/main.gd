@@ -37,7 +37,6 @@ var initial_selection_mode := false
 var selected_initial_cards: Array = []
 var king_reveal_mode := false
 var king_player_index := -1
-var jack_player_index := -1
 var queens_player_index := -1
 var MAX_PLAYERS = 4
 var is_showing_drawn_card := false
@@ -351,20 +350,23 @@ func show_center_card(card_data: Dictionary):
 		for child in center_card_slot.get_children():
 			if child.name != "PreviewCard":
 				child.queue_free()
-	
-	var card_node = preload("res://scenes/card.tscn").instantiate()
-	if card_node:
-		card_node.set_data(card_data)
-		card_node.flip_card(true)
-		card_node.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		card_node.focus_mode = Control.FOCUS_NONE
-		card_node.mouse_default_cursor_shape = Control.CURSOR_ARROW
-		card_node.is_center_card = true
-		card_node.position = Vector2.ZERO
-		card_node.z_index = 3
-		center_card_slot.add_child(card_node)
-	
-	center_card = card_data.duplicate()
+		
+		if card_data and not card_data.is_empty():
+			var card_node = preload("res://scenes/card.tscn").instantiate()
+			if card_node:
+				card_node.set_data(card_data)
+				card_node.flip_card(true)
+				card_node.mouse_filter = Control.MOUSE_FILTER_IGNORE
+				card_node.focus_mode = Control.FOCUS_NONE
+				card_node.mouse_default_cursor_shape = Control.CURSOR_ARROW
+				card_node.is_center_card = true
+				card_node.position = Vector2.ZERO
+				card_node.z_index = 3
+				center_card_slot.add_child(card_node)
+			
+			center_card = card_data.duplicate()
+		else:
+			center_card = {}
 
 func update_center_card_slot_position():
 	if center_card_slot:
@@ -720,6 +722,27 @@ func process_state_response(json: Dictionary):
 	
 	if json.has("center_card") and not initial_selection_mode:
 		show_center_card(json.center_card)
+		
+	# Handle special card responses
+	match last_request_type:
+		"king_reveal":
+			if json.has("status") and json.status == "ok":
+				king_reveal_mode = false
+				message_label.text = "Card revealed! Waiting for opponent's turn."
+				current_turn_index = int(json.current_turn_index)
+				update_card_states()
+				
+		"play_card":
+			if json.has("status") and json.status == "ok":
+				if json.has("king_reveal_mode") and json.king_reveal_mode:
+					king_reveal_mode = true
+					king_player_index = player_index
+					message_label.text = "King played! Choose one of your cards to reveal."
+					enable_king_reveal_mode()
+				elif json.has("next_player_card"):
+					if current_turn_index == player_index:
+						show_temporary_card(json.next_player_card)
+					update_card_states()
 
 func update_card_states():
 	for i in range(2):
@@ -772,9 +795,25 @@ func _on_card_reveal_pressed(card_node):
 	if is_request_in_progress:
 		return
 		
+	is_request_in_progress = true
+	last_request_type = "king_reveal"
+	var url = BASE_URL + "king_reveal"
+	var headers = ["Content-Type: application/json"]
+	var body = JSON.stringify({
+		"room_id": room_id,
+		"player_index": player_index,
+		"revealed_card_id": card_node.card_data.card_id
+	})
+	http.request(url, headers, HTTPClient.METHOD_POST, body)
+	
+	# Immediately show the card as revealed
 	card_node.flip_card(true)
 	card_node.modulate = Color(0.7, 1.0, 0.7)
 	
+	# Disable all cards during reveal
+	disable_all_cards()
+	
+	# Set up timer to flip the card back
 	var timer = Timer.new()
 	add_child(timer)
 	timer.wait_time = 3.0
@@ -784,6 +823,7 @@ func _on_card_reveal_pressed(card_node):
 			card_node.flip_card(false)
 			card_node.modulate = Color(1, 1, 1)
 		
+		# Remove the King card that was played
 		var player_node = $GameContainer.get_node_or_null("BottomPlayerContainer/Player%d" % player_index)
 		if is_instance_valid(player_node):
 			var hand_container = player_node.get_node("HandContainer")
@@ -793,22 +833,12 @@ func _on_card_reveal_pressed(card_node):
 						add_to_used_deck(card)
 						card.queue_free()
 						break
-	)	
+		
+		king_reveal_mode = false
+		message_label.text = "Card revealed! Waiting for opponent's turn."
+		timer.queue_free()
+	)
 	timer.start()
-	
-	is_request_in_progress = true
-	last_request_type = "king_reveal"
-	var url = BASE_URL + "king_reveal"
-	var headers = ["Content-Type: application/json"]
-	var body = JSON.stringify({
-		"room_id": room_id,
-		"player_index": player_index,
-		"revealed_card_id": card_node.card_data.card_id,
-		"temporary_reveal": true
-	})
-	http.request(url, headers, HTTPClient.METHOD_POST, body)
-	
-	disable_all_cards()
 
 func _on_card_played(card_data):
 	var player_node = $GameContainer.get_node_or_null("BottomPlayerContainer/Player%d" % player_index)
@@ -821,11 +851,15 @@ func _on_card_played(card_data):
 	if initial_selection_mode:
 		return
 	
+	send_play_card(card_data.card_id)
+	
 	if card_data.rank == "13":
 		king_reveal_mode = true
 		king_player_index = player_index
 		message_label.text = "King played! Choose one of your cards to reveal."
 		
+		show_center_card(card_data)
+		
 		var hand_container = player_node.get_node("HandContainer")
 		if hand_container:
 			for card in hand_container.get_children():
@@ -833,33 +867,31 @@ func _on_card_played(card_data):
 					card.disabled = true
 					card.modulate = Color(0.7, 0.7, 0.7)
 					card.mouse_filter = Control.MOUSE_FILTER_IGNORE
+					break
 			
 		enable_king_reveal_mode()
-		
-	elif card_data.rank == "11":
-		jack_swap_mode = true
-		jack_player_index = player_index
-		message_label.text = "Jack played! Select a card to swap."
-		
-		var hand_container = player_node.get_node("HandContainer")
-		if hand_container:
-			for card in hand_container.get_children():
-				if card.card_data.card_id == card_data.card_id:
-					card.disabled = true
-					card.modulate = Color(0.7, 0.7, 0.7)
-					card.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			
-		enable_jack_swap_mode()
 		
 	elif card_data.rank == "12":
 		message_label.text = "Queen played! Card will be added to opponent's hand."
 		show_center_card({})
+		
+		var hand_container = player_node.get_node("HandContainer")
+		if hand_container:
+			for card in hand_container.get_children():
+				if card.card_data.card_id == card_data.card_id:
+					card.queue_free()
+					break
 	else:
 		show_center_card(card_data)
+		message_label.text = "Card played: " + card_data.rank + " of " + card_data.suit
+		
+		var hand_container = player_node.get_node("HandContainer")
+		if hand_container:
+			for card in hand_container.get_children():
+				if card.card_data.card_id == card_data.card_id:
+					card.queue_free()
+					break
 	
-	send_play_card(card_data.card_id)
-	
-	# Flip all cards face-down in opponent's hand
 	var opponent_index = (player_index + 1) % 2
 	var opponent_container = $GameContainer.get_node_or_null("TopPlayerContainer/Player%d" % opponent_index)
 	if opponent_container:
@@ -981,62 +1013,6 @@ func enable_king_reveal_mode():
 					if not card.pressed.is_connected(_on_card_reveal_pressed):
 						card.pressed.connect(_on_card_reveal_pressed.bind(card))
 
-func enable_jack_swap_mode():
-	var player_node = $GameContainer.get_node_or_null("BottomPlayerContainer/Player%d" % player_index)
-	if is_instance_valid(player_node):
-		var hand_container = player_node.get_node("HandContainer")
-		if hand_container:
-			for card in hand_container.get_children():
-				if card.has_method("flip_card"):
-					card.disabled = false
-					if not card.pressed.is_connected(_on_card_swap_pressed):
-						card.pressed.connect(_on_card_swap_pressed.bind(card))
-
-func _on_card_swap_pressed(card_node):
-	if not jack_swap_mode:
-		return
-		
-	if jack_swap_selection.from == null:
-		jack_swap_selection.from = card_node.card_data.card_id
-		card_node.modulate = Color(0.7, 1.0, 0.7)
-		message_label.text = "Now select opponent's card to swap with"
-		
-		var opponent_index = (player_index + 1) % 2
-		var opponent_node = $GameContainer.get_node_or_null("TopPlayerContainer/Player%d" % opponent_index)
-		if is_instance_valid(opponent_node):
-			for card in opponent_node.get_node("HandContainer").get_children():
-				card.disabled = false
-				if not card.pressed.is_connected(_on_card_swap_pressed):
-					card.pressed.connect(_on_card_swap_pressed.bind(card))
-	else:
-		jack_swap_selection.to = card_node.card_data.card_id
-		
-		is_request_in_progress = true
-		last_request_type = "jack_swap"
-		var url = BASE_URL + "jack_swap"
-		var headers = ["Content-Type: application/json"]
-		var body = JSON.stringify({
-			"room_id": room_id,
-			"player_index": player_index,
-			"from_card_id": jack_swap_selection.from,
-			"to_card_id": jack_swap_selection.to
-		})
-		http.request(url, headers, HTTPClient.METHOD_POST, body)
-		
-		jack_swap_selection = {"from": null, "to": null}
-		
-		var player_node = $GameContainer.get_node_or_null("BottomPlayerContainer/Player%d" % player_index)
-		if is_instance_valid(player_node):
-			var hand_container = player_node.get_node("HandContainer")
-			if hand_container:
-				for card in hand_container.get_children():
-					if card.rank == "11" and card.disabled:
-						add_to_used_deck(card)
-						card.queue_free()
-						break
-		
-		disable_all_cards()
-
 func disable_all_cards():
 	for container_name in ["BottomPlayerContainer", "TopPlayerContainer"]:
 		for i in range(2):
@@ -1047,8 +1023,6 @@ func disable_all_cards():
 					card.modulate = Color(1, 1, 1)
 					if card.pressed.is_connected(_on_card_reveal_pressed):
 						card.pressed.disconnect(_on_card_reveal_pressed)
-					if card.pressed.is_connected(_on_card_swap_pressed):
-						card.pressed.disconnect(_on_card_swap_pressed)
 
 func _on_card_pressed(card_node):
 	if initial_selection_mode:
